@@ -32,6 +32,48 @@ func NewNode(id NodeID, q *QSet) *Node {
 	}
 }
 
+func (n *Node) Handle(env *Env, ch chan<- *Env) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	if msg, ok := n.Ext[env.I]; ok {
+		// This node has already externalized a value for the given slot.
+		// Send an EXTERNALIZE message outbound, unless the inbound
+		// message is also EXTERNALIZE.
+		// TODO: ...in which case double-check that the values agree?
+		if _, ok := env.M.(*ExtMsg); !ok {
+			ch <- &Env{
+				V: n.ID,
+				I: env.I,
+				Q: n.Q,
+				M: msg,
+			}
+		}
+		return
+	}
+
+	s, ok := n.Pending[env.I]
+	if !ok {
+		s = &Slot{ID: env.I, V: n}
+		n.Pending[env.I] = s
+	}
+
+	outbound := s.Handle(env)
+	if outbound == nil {
+		return
+	}
+
+	if extMsg, ok := outbound.M.(*ExtMsg); ok {
+		// Handling the inbound message resulted in externalizing a value.
+		// We can now save the EXTERNALIZE message and get rid of the Slot
+		// object.
+		n.Ext[env.I] = extMsg
+		delete(n.Pending, env.I)
+	}
+
+	ch <- outbound
+}
+
 var ErrNoPrev = errors.New("no previous value")
 
 func (n *Node) G(i SlotID, m []byte) (result [32]byte, err error) {
