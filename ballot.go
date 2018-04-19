@@ -13,3 +13,10 @@ var ZeroBallot Ballot
 func (b Ballot) IsZero() bool {
 	return b.N == 0 && b.X == nil
 }
+
+func (b Ballot) Less(other Ballot) bool {
+	if b.N < other.N {
+		return true
+	}
+	return b.N == other.N && b.X.Less(other.X)
+}

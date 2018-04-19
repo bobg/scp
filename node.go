@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
+	"log"
 	"math/big"
 	"sort"
 	"sync"
@@ -55,11 +56,14 @@ func (n *Node) Handle(env *Env, ch chan<- *Env) {
 
 	s, ok := n.Pending[env.I]
 	if !ok {
-		s = &Slot{ID: env.I, V: n}
+		s = newSlot(env.I, n)
 		n.Pending[env.I] = s
 	}
 
-	outbound := s.Handle(env)
+	outbound, err := s.Handle(env)
+	if err != nil {
+		log.Fatal(err) // xxx
+	}
 	if outbound == nil {
 		return
 	}
@@ -172,6 +176,15 @@ func (n *Node) Neighbors(i SlotID, num int) ([]NodeID, error) {
 		}
 	}
 	return result, nil
+}
+
+func (n *Node) Priority(i SlotID, num int, nodeID NodeID) ([32]byte, error) {
+	m := new(bytes.Buffer)
+	m.WriteByte('P')
+	numBytes, _ := xdr.Marshal(num)
+	m.Write(numBytes)
+	m.WriteString(nodeID.String())
+	return n.G(i, m.Bytes())
 }
 
 func init() {

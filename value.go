@@ -28,6 +28,14 @@ func (vs *ValueSet) Add(v Value) {
 	})
 }
 
+// AddSet adds the members of one ValueSet to another.
+// TODO: this can be done _much_ better.
+func (vs *ValueSet) AddSet(other ValueSet) {
+	for _, v := range other {
+		vs.Add(v)
+	}
+}
+
 // Contains uses binary search to test whether vs contains v.
 func (vs ValueSet) Contains(v Value) bool {
 	if len(vs) == 0 {
