@@ -54,7 +54,7 @@ type ExtMsg struct {
 }
 
 func (em *ExtMsg) Less(other Msg) bool {
-	if other, ok := em.(*ExtMsg); ok {
+	if other, ok := other.(*ExtMsg); ok {
 		// xxx
 	}
 	return false

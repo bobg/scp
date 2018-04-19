@@ -6,7 +6,7 @@ package scp
 type QSet [][]NodeID
 
 func (q QSet) Each(f func([]NodeID)) {
-	for _, slice := range QSet {
+	for _, slice := range q {
 		f(slice)
 	}
 }

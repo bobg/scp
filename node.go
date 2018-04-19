@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"math/big"
+	"sort"
 	"sync"
 
 	"github.com/davecgh/go-xdr/xdr"
@@ -113,12 +114,41 @@ func (n *Node) Weight(id NodeID) float64 {
 	return float64(count) / float64(n.Q.Size())
 }
 
+// Peers returns a flattened, uniquified list of the node IDs in n's
+// quorum slices, not including n's own ID.
+func (n *Node) Peers() []NodeID {
+	var result []NodeID
+	n.Q.Each(func(ids []NodeID) {
+		for _, id := range ids {
+			result = append(result, id)
+		}
+	})
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].String() < result[j].String()
+	})
+	var (
+		to   int
+		last NodeID
+	)
+	for from := 0; from < len(result); from++ {
+		if result[from] == last {
+			continue
+		}
+		last = result[from]
+		if from != to {
+			result[to] = result[from]
+		}
+		to++
+	}
+	return result[:to]
+}
+
 // maxuint256, as a float
 var hmax *big.Float
 
 func (n *Node) Neighbors(i SlotID, num int) ([]NodeID, error) {
 	peers := n.Peers()
-	peers = append(peers, node.ID)
+	peers = append(peers, n.ID)
 	var result []NodeID
 	for _, nodeID := range peers {
 		w := big.NewFloat(n.Weight(nodeID))
@@ -132,8 +162,8 @@ func (n *Node) Neighbors(i SlotID, num int) ([]NodeID, error) {
 		m.WriteByte('N')
 		numBytes, _ := xdr.Marshal(num)
 		m.Write(numBytes)
-		m.WriteString(nodeID)
-		g, err := n.G(m.Bytes())
+		m.WriteString(nodeID.String())
+		g, err := n.G(i, m.Bytes())
 		if err != nil {
 			return nil, err
 		}
