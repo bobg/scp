@@ -20,3 +20,8 @@ func (b Ballot) Less(other Ballot) bool {
 	}
 	return b.N == other.N && b.X.Less(other.X)
 }
+
+// Aborts tells whether a vote to prepare b aborts other.
+func (b Ballot) Aborts(other Ballot) bool {
+	return other.N < b.N && !VEqual(other.X, b.X)
+}
