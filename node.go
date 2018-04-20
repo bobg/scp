@@ -39,7 +39,7 @@ func NewNode(id NodeID, q [][]NodeID) *Node {
 	}
 }
 
-func (n *Node) Handle(env *Env, ch chan<- *Env) {
+func (n *Node) Handle(env *Env) (*Env, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -48,15 +48,15 @@ func (n *Node) Handle(env *Env, ch chan<- *Env) {
 		// Send an EXTERNALIZE message outbound, unless the inbound
 		// message is also EXTERNALIZE.
 		// TODO: ...in which case double-check that the values agree?
-		if _, ok := env.M.(*ExtMsg); !ok {
-			ch <- &Env{
-				V: n.ID,
-				I: env.I,
-				Q: n.Q,
-				M: msg,
-			}
+		if _, ok = env.M.(*ExtMsg); ok {
+			return nil, nil
 		}
-		return
+		return &Env{
+			V: n.ID,
+			I: env.I,
+			Q: n.Q,
+			M: msg,
+		}, nil
 	}
 
 	s, ok := n.Pending[env.I]
@@ -67,10 +67,10 @@ func (n *Node) Handle(env *Env, ch chan<- *Env) {
 
 	outbound, err := s.Handle(env)
 	if err != nil {
-		log.Fatal(err) // xxx
+		return nil, err
 	}
 	if outbound == nil {
-		return
+		return nil, nil
 	}
 
 	if extMsg, ok := outbound.M.(*ExtMsg); ok {
@@ -81,7 +81,7 @@ func (n *Node) Handle(env *Env, ch chan<- *Env) {
 		delete(n.Pending, env.I)
 	}
 
-	ch <- outbound
+	return outbound, nil
 }
 
 var ErrNoPrev = errors.New("no previous value")
@@ -190,6 +190,12 @@ func (n *Node) Priority(i SlotID, num int, nodeID NodeID) ([32]byte, error) {
 	m.Write(numBytes)
 	m.WriteString(nodeID.String())
 	return n.G(i, m.Bytes())
+}
+
+func (n *Node) Logf(f string, a ...interface{}) {
+	f = "node %s: " + f
+	a = append([]interface{}{n.ID}, a...)
+	log.Printf(f, a...)
 }
 
 func init() {

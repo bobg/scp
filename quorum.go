@@ -66,7 +66,7 @@ func (s *Slot) findBlockingSetHelper(slices [][]NodeID, ids []NodeID, pred inter
 // node satisfies the given predicate.
 func (s *Slot) findQuorum(pred interface{}) []NodeID {
 	m := make(map[NodeID]struct{})
-	m = s.findNodeQuorum(s.V.ID, s.V.Q, pred, m)
+	m, _ = s.findNodeQuorum(s.V.ID, s.V.Q, pred, m)
 	if len(m) == 0 {
 		return nil
 	}
@@ -80,20 +80,20 @@ func (s *Slot) findQuorum(pred interface{}) []NodeID {
 // findNodeQuorum is a helper function for findQuorum. It checks that
 // the node has at least one slice whose members (and the transitive
 // closure over them) all satisfy the given predicate.
-func (s *Slot) findNodeQuorum(nodeID NodeID, q [][]NodeID, pred interface{}, m map[NodeID]struct{}) map[NodeID]struct{} {
+func (s *Slot) findNodeQuorum(nodeID NodeID, q [][]NodeID, pred interface{}, m map[NodeID]struct{}) (map[NodeID]struct{}, interface{}) {
 	for _, slice := range q {
-		m2 := s.findSliceQuorum(slice, pred, m)
+		m2, nextPred := s.findSliceQuorum(slice, pred, m)
 		if len(m2) > 0 {
-			return m2
+			return m2, nextPred
 		}
 	}
-	return nil
+	return nil, pred
 }
 
 // findSliceQuorum is a helper function for findNodeQuorum. It checks
 // whether every node in a given quorum slice (and the transitive
 // closure over them) satisfies the given predicate.
-func (s *Slot) findSliceQuorum(slice []NodeID, pred interface{}, m map[NodeID]struct{}) map[NodeID]struct{} {
+func (s *Slot) findSliceQuorum(slice []NodeID, pred interface{}, m map[NodeID]struct{}) (map[NodeID]struct{}, interface{}) {
 	var newNodeIDs []NodeID
 	for _, nodeID := range slice {
 		if _, ok := m[nodeID]; !ok {
@@ -101,11 +101,12 @@ func (s *Slot) findSliceQuorum(slice []NodeID, pred interface{}, m map[NodeID]st
 		}
 	}
 	if len(newNodeIDs) == 0 {
-		return m
+		return m, pred
 	}
+	origPred := pred
 	for _, nodeID := range newNodeIDs {
 		if env, ok := s.M[nodeID]; !ok || !doTest(env, pred) {
-			return nil
+			return nil, origPred
 		}
 		pred = getNext(pred)
 	}
@@ -119,12 +120,12 @@ func (s *Slot) findSliceQuorum(slice []NodeID, pred interface{}, m map[NodeID]st
 	for _, nodeID := range newNodeIDs {
 		env, ok := s.M[nodeID]
 		if !ok {
-			return nil
+			return nil, origPred
 		}
-		m2 = s.findNodeQuorum(nodeID, env.Q, pred, m2)
+		m2, pred = s.findNodeQuorum(nodeID, env.Q, pred, m2)
 		if len(m2) == 0 {
-			return nil
+			return nil, origPred
 		}
 	}
-	return m2
+	return m2, pred
 }

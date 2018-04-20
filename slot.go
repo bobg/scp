@@ -2,6 +2,7 @@ package scp
 
 import (
 	"bytes"
+	"math"
 	"time"
 )
 
@@ -21,7 +22,7 @@ type Slot struct {
 	B      Ballot
 	P, PP  Ballot
 	C, H   Ballot
-	AP, CP []Ballot // accepted-prepared, confirmed-prepared; kept sorted
+	AP, CP BallotSet // accepted-prepared, confirmed-prepared; kept sorted
 
 	Upd *time.Timer
 }
@@ -108,52 +109,59 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 			s.updateXYZ()
 			s.B.X = s.Z.Combine()
 		} else {
-			// xxx update s.AP, s.CP, s.C, s.H
-			if len(s.CP) > 0 && s.B.Less(s.CP[len(s.CP)-1]) {
-				// raise B to the highest confirmed-prepared ballot
-				s.B = s.CP[len(s.CP)-1]
-				s.cancelUpd()
-			} else {
-				// When a node sees sees messages from a quorum to which it
-				// belongs such that each message's "ballot.counter" is
-				// greater than or equal to the local "ballot.counter", the
-				// node arms a timer for its local "ballot.counter + 1"
-				// seconds.
-				if s.Upd == nil { // don't bother if a timer's already armed
-					nodeIDs := s.findQuorum(func(env *Env) bool {
-						return env.M.BN() > s.B.N
-					})
-					if len(nodeIDs) > 0 {
-						s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(deferredUpdateInterval)), s.deferredUpdate)
-					}
-				}
+			s.updateAP()
 
-				// If nodes forming a blocking threshold all have
-				// "ballot.counter" values greater than the local
-				// "ballot.counter", then the local node immediately increases
-				// "ballot.counter" to the lowest value such that this is no
-				// longer the case.  (When doing so, it also disables any
-				// pending timers associated with the old "counter".)
-				nodeIDs := s.findBlockingSet(func(env *Env) bool {
-					return env.M.BN() > s.B.N
-				})
-				if len(nodeIDs) > 0 {
-					s.cancelUpd()
-					for i, nodeID := range nodeIDs {
-						env := s.M[nodeID]
-						bn := env.M.BN()
-						if i == 0 || bn < s.B.N {
-							s.B.N = bn
-						}
+			// Update s.P and s.PP, the two highest accepted-prepared
+			// ballots with unequal values.
+			if len(s.AP) > 0 {
+				s.P = s.AP[len(s.AP)-1]
+				s.PP = ZeroBallot
+				for i := len(s.AP) - 2; i >= 0; i-- {
+					ap := s.AP[i]
+					if ap.N < s.P.N && !VEqual(ap.X, s.P.X) {
+						s.PP = ap
+						break
 					}
-					s.setBX()
 				}
 			}
 
-			// xxx set s.P and s.PP (p')
+			// Update s.CP, the set of confirmed-prepared ballots.
+			var cps []Ballot
+			for _, ap := range s.AP {
+				if s.CP.Contains(ap) {
+					continue
+				}
+				nodeIDs := s.findQuorum(func(env *Env) bool {
+					return env.acceptsPrepared(ap)
+				})
+				if len(nodeIDs) > 0 {
+					cps = append(cps, ap)
+				}
+			}
+			for _, cp := range cps {
+				s.AP.Remove(cp)
+				s.CP.Add(cp)
+			}
 
-			if !s.C.IsZero() && ((!s.P.IsZero() && s.C.Less(s.P) && !VEqual(s.P.X, s.C.X)) || (!s.PP.IsZero() && s.C.Less(s.PP) && !VEqual(s.PP.X, s.C.X))) {
-				s.C = ZeroBallot
+			// Update s.H, the highest confirmed-prepared ballot.
+			if len(s.CP) > 0 && s.H.Less(s.CP[len(s.CP)-1]) {
+				s.H = s.CP[len(s.CP)-1]
+			}
+
+			// Update s.B.
+			if s.B.Less(s.H) {
+				// raise B to the highest confirmed-prepared ballot
+				s.B = s.H
+				s.cancelUpd()
+			} else {
+				s.updateB()
+			}
+
+			// Update s.C.
+			if !s.C.IsZero() {
+				if (s.C.Less(s.P) && !VEqual(s.P.X, s.C.X)) || (s.C.Less(s.PP) && !VEqual(s.PP.X, s.C.X)) {
+					s.C = ZeroBallot
+				}
 			}
 			if s.C.IsZero() && s.H.N > 0 && !s.P.Aborts(s.H) && !s.PP.Aborts(s.H) {
 				s.C = s.B
@@ -162,31 +170,61 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 			// The PREPARE phase ends at a node when the statement "commit
 			// b" reaches the accept state in federated voting for some
 			// ballot "b".
-			if !s.C.IsZero() {
-				pred := &acceptCommitPredicate{min: s.C.N, max: s.H.N, val: s.B.X}
+			if !s.C.IsZero() && !s.H.IsZero() {
+				var cn, hn int
+				pred := &acceptCommitPredicate{
+					min:      s.C.N,
+					max:      s.H.N,
+					val:      s.B.X,
+					finalMin: &cn,
+					finalMax: &hn,
+				}
 				nodeIDs := s.findBlockingSetOrQuorum(pred)
 				if len(nodeIDs) > 0 {
 					// There is a blocking set or quorum that votes-or-accepts
 					// commit(<n, s.B.X>) for various ranges of n that have a
 					// non-empty overlap, so we can accept commit(<n, s.B.X>).
 					s.Ph = PhCommit
+					s.C.N = cn
+					s.H.N = hn
 				}
 			}
 		}
 
 	case PhCommit:
-		// xxx update s.AP, s.CP, s.C, s.H
-		if s.H.N > s.B.N {
-			s.B.N = s.H.N
+		s.updateAP()
+		s.P = s.AP[len(s.AP)-1]
+
+		// Update the accepted-commit bounds.
+		var acmin, acmax int
+		acpred := &acceptCommitPredicate{
+			min:      s.C.N,
+			max:      math.MaxInt32,
+			val:      s.B.X,
+			finalMin: &acmin,
+			finalMax: &acmax,
 		}
-		// xxx update accepted-commit ballots
+		nodeIDs := s.findQuorum(acpred)
+		if len(nodeIDs) > 0 {
+			s.C.N = acmin
+			s.H.N = acmax
+		}
 
 		// As soon as a node confirms "commit b" for any ballot "b", it
 		// moves to the EXTERNALIZE stage.
-		pred := &confirmCommitPredicate{min: s.C.N, max: s.H.N, val: s.B.X}
-		nodeIDs := s.findQuorum(pred)
+		var cn, hn int
+		pred := &confirmCommitPredicate{
+			min:      s.C.N,
+			max:      s.H.N,
+			val:      s.B.X,
+			finalMin: &cn,
+			finalMax: &hn,
+		}
+		nodeIDs = s.findQuorum(pred)
 		if len(nodeIDs) > 0 {
 			s.Ph = PhExt // \o/
+			s.C.N = cn
+			s.H.N = hn
 		}
 	}
 
@@ -234,8 +272,12 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 }
 
 func (s *Slot) deferredUpdate() {
-	s.V.mu.Lock()
+	s.V.mu.Lock() // xxx maybe this needs to be a Node method
 	defer s.V.mu.Unlock()
+
+	if s.Upd == nil {
+		return
+	}
 
 	s.Upd = nil
 	s.B.N++
@@ -256,6 +298,9 @@ func (s *Slot) cancelUpd() {
 }
 
 func (s *Slot) setBX() {
+	if s.Ph >= PhCommit {
+		return
+	}
 	if len(s.CP) > 0 {
 		s.B.X = s.CP[len(s.CP)-1].X
 	} else {
@@ -347,9 +392,10 @@ func (s *Slot) updateXYZ() {
 }
 
 type acceptCommitPredicate struct {
-	min, max         int
-	val              Value
-	nextMin, nextMax int
+	min, max           int
+	val                Value
+	nextMin, nextMax   int
+	finalMin, finalMax *int
 }
 
 func (p *acceptCommitPredicate) test(env *Env) bool {
@@ -402,6 +448,8 @@ func (p *acceptCommitPredicate) test(env *Env) bool {
 }
 
 func (p *acceptCommitPredicate) next() predicate {
+	*p.finalMin = p.nextMin
+	*p.finalMax = p.nextMax
 	return &acceptCommitPredicate{
 		min: p.nextMin,
 		max: p.nextMax,
@@ -410,9 +458,10 @@ func (p *acceptCommitPredicate) next() predicate {
 }
 
 type confirmCommitPredicate struct {
-	min, max         int
-	val              Value
-	nextMin, nextMax int
+	min, max           int
+	val                Value
+	nextMin, nextMax   int
+	finalMin, finalMax *int
 }
 
 func (p *confirmCommitPredicate) test(env *Env) bool {
@@ -452,9 +501,60 @@ func (p *confirmCommitPredicate) test(env *Env) bool {
 }
 
 func (p *confirmCommitPredicate) next() predicate {
+	*p.finalMin = p.nextMin
+	*p.finalMax = p.nextMax
 	return &confirmCommitPredicate{
 		min: p.nextMin,
 		max: p.nextMax,
 		val: p.val,
+	}
+}
+
+// Update s.AP - the set of accepted-prepared ballots.
+func (s *Slot) updateAP() {
+	if !s.AP.Contains(s.B) {
+		nodeIDs := s.findBlockingSetOrQuorum(func(env *Env) bool {
+			return env.votesOrAcceptsPrepared(s.B)
+		})
+		if len(nodeIDs) > 0 {
+			s.AP.Add(s.B)
+		}
+	}
+}
+
+func (s *Slot) updateB() {
+	// When a node sees sees messages from a quorum to which it
+	// belongs such that each message's "ballot.counter" is
+	// greater than or equal to the local "ballot.counter", the
+	// node arms a timer for its local "ballot.counter + 1"
+	// seconds.
+	if s.Upd == nil { // don't bother if a timer's already armed
+		nodeIDs := s.findQuorum(func(env *Env) bool {
+			return env.M.BN() > s.B.N
+		})
+		if len(nodeIDs) > 0 {
+			s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(deferredUpdateInterval)), s.deferredUpdate)
+		}
+	}
+
+	// If nodes forming a blocking threshold all have
+	// "ballot.counter" values greater than the local
+	// "ballot.counter", then the local node immediately increases
+	// "ballot.counter" to the lowest value such that this is no
+	// longer the case.  (When doing so, it also disables any
+	// pending timers associated with the old "counter".)
+	nodeIDs := s.findBlockingSet(func(env *Env) bool {
+		return env.M.BN() > s.B.N
+	})
+	if len(nodeIDs) > 0 {
+		s.cancelUpd()
+		for i, nodeID := range nodeIDs {
+			env := s.M[nodeID]
+			bn := env.M.BN()
+			if i == 0 || bn < s.B.N {
+				s.B.N = bn
+			}
+		}
+		s.setBX()
 	}
 }
