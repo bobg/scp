@@ -4,7 +4,7 @@ package scp
 type Env struct {
 	V NodeID
 	I SlotID
-	Q *QSet
+	Q QSet
 	M Msg
 }
 

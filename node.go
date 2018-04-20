@@ -18,14 +18,14 @@ type NodeID interface {
 
 type Node struct {
 	ID      NodeID
-	Q       *QSet
+	Q       QSet
 	Pending map[SlotID]*Slot
 	Ext     map[SlotID]*ExtMsg
 
 	mu sync.Mutex
 }
 
-func NewNode(id NodeID, q *QSet) *Node {
+func NewNode(id NodeID, q QSet) *Node {
 	return &Node{
 		ID:      id,
 		Q:       q,
@@ -107,26 +107,26 @@ func (n *Node) Weight(id NodeID) float64 {
 		return 1.0
 	}
 	count := 0
-	n.Q.Each(func(ids []NodeID) {
-		for _, thisID := range ids {
+	for _, slice := range n.Q {
+		for _, thisID := range slice {
 			if id == thisID {
 				count++
 				break
 			}
 		}
-	})
-	return float64(count) / float64(n.Q.Size())
+	}
+	return float64(count) / float64(len(n.Q))
 }
 
 // Peers returns a flattened, uniquified list of the node IDs in n's
 // quorum slices, not including n's own ID.
 func (n *Node) Peers() []NodeID {
 	var result []NodeID
-	n.Q.Each(func(ids []NodeID) {
-		for _, id := range ids {
+	for _, slice := range n.Q {
+		for _, id := range slice {
 			result = append(result, id)
 		}
-	})
+	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].String() < result[j].String()
 	})
