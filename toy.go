@@ -8,7 +8,6 @@ import (
 	"flag"
 	"log"
 	"math/rand"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -21,14 +20,17 @@ type entry struct {
 	ch   chan *scp.Env
 }
 
-type valType int
+type valType string
 
 func (v valType) Less(other scp.Value) bool {
 	return v < other.(valType)
 }
 
 func (v valType) Combine(other scp.Value) scp.Value {
-	return valType(v + other.(valType))
+	if v < other.(valType) {
+		return v
+	}
+	return other
 }
 
 func (v valType) Bytes() []byte {
@@ -38,13 +40,15 @@ func (v valType) Bytes() []byte {
 }
 
 func (v valType) String() string {
-	return strconv.Itoa(int(v))
+	return string(v)
 }
 
 // Usage:
-//   go run toy.go [-seed N] '2 3 4 / 2 3 5 / 6 7 8' '1 3 4 / 7 8' ...
-// Each argument describes the quorum slices for the corresponding node (1-based).
-// Nodes do not specify themselves as quorum slice members.
+//   go run toy.go [-seed N] 'alice: bob carol david / bob carol ed / fran gabe hank' 'bob: alice carol david / gabe hank' ...
+// Each argument gives a node's name (before the colon) and the node's
+// quorum slices.
+// Nodes do not specify themselves as quorum slice members, though
+// they are understood to belong to every quorum slice.
 
 func main() {
 	seed := flag.Int64("seed", 1, "RNG seed")
@@ -55,10 +59,11 @@ func main() {
 
 	ch := make(chan *scp.Env, 5)
 	var highestSlot int32
-	for i, arg := range flag.Args() {
-		nodeID := scp.NodeID(strconv.Itoa(i + 1))
+	for _, arg := range flag.Args() {
+		parts := strings.SplitN(arg, ":", 2)
+		nodeID := scp.NodeID(parts[0])
 		var q [][]scp.NodeID
-		for _, slices := range strings.Split(arg, "/") {
+		for _, slices := range strings.Split(parts[1], "/") {
 			var qslice []scp.NodeID
 			for _, field := range strings.Fields(slices) {
 				if field == string(nodeID) {
@@ -69,10 +74,10 @@ func main() {
 			}
 			q = append(q, qslice)
 		}
+		node := scp.NewNode(nodeID, q)
 		nodeCh := make(chan *scp.Env)
-		e := entry{node: scp.NewNode(nodeID, q), ch: nodeCh}
-		entries[nodeID] = e
-		go nodefn(e.node, e.ch, ch, &highestSlot)
+		entries[nodeID] = entry{node: node, ch: nodeCh}
+		go nodefn(node, nodeCh, ch, &highestSlot)
 	}
 
 	// log.Print(spew.Sdump(entries))
@@ -125,7 +130,7 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 			}
 
 		case <-timeCh:
-			val := valType(rand.Intn(20))
+			val := foods[rand.Intn(len(foods))]
 			slotID := 1 + atomic.LoadInt32(highestSlot)
 
 			// Send a nominate message "from" the node to itself. If it has
@@ -152,4 +157,15 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 			}
 		}
 	}
+}
+
+var foods = []valType{
+	"pizza",
+	"burgers",
+	"burritos",
+	"sandwiches",
+	"sushi",
+	"salads",
+	"gyros",
+	"indian",
 }
