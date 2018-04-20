@@ -43,6 +43,10 @@ func (v valType) Bytes() []byte {
 	return buf.Bytes()
 }
 
+func (v valType) String() string {
+	return strconv.Itoa(int(v))
+}
+
 // Usage:
 //   go run toy.go [-seed N] '2 3 4 / 2 3 5 / 6 7 8' '1 3 4 / 7 8' ...
 // Each argument describes the quorum slices for the corresponding node (1-based).
@@ -82,8 +86,9 @@ func main() {
 	}
 
 	for env := range ch {
-		if int32(env.I) > highestSlot { // this is the only thread that writes highestSlot, so it's ok to read it non-atomically
+		if _, ok := env.M.(*scp.NomMsg); !ok && int32(env.I) > highestSlot { // this is the only thread that writes highestSlot, so it's ok to read it non-atomically
 			atomic.StoreInt32(&highestSlot, int32(env.I))
+			log.Printf("highestSlot is now %d", highestSlot)
 		}
 
 		// Send this message to each of the node's peers.
@@ -113,12 +118,15 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 			timer.Stop()
 			close(timeCh)
 
+			n.Logf("handling %s", env)
+
 			res, err := n.Handle(env)
 			if err != nil {
 				n.Logf("could not handle %s: %s", env, err)
 				continue
 			}
 			if res != nil {
+				n.Logf("responding %s", res)
 				send <- res
 			}
 
@@ -139,6 +147,7 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 					X: vs,
 				},
 			}
+			n.Logf("trying to get something started with %s", env)
 			res, err := n.Handle(env)
 			if err != nil {
 				n.Logf("could not handle %s: %s", env, err)

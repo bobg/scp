@@ -451,9 +451,11 @@ func (p *acceptCommitPredicate) next() predicate {
 	*p.finalMin = p.nextMin
 	*p.finalMax = p.nextMax
 	return &acceptCommitPredicate{
-		min: p.nextMin,
-		max: p.nextMax,
-		val: p.val,
+		min:      p.nextMin,
+		max:      p.nextMax,
+		val:      p.val,
+		finalMin: p.finalMin,
+		finalMax: p.finalMax,
 	}
 }
 
@@ -504,9 +506,11 @@ func (p *confirmCommitPredicate) next() predicate {
 	*p.finalMin = p.nextMin
 	*p.finalMax = p.nextMax
 	return &confirmCommitPredicate{
-		min: p.nextMin,
-		max: p.nextMax,
-		val: p.val,
+		min:      p.nextMin,
+		max:      p.nextMax,
+		val:      p.val,
+		finalMin: p.finalMin,
+		finalMax: p.finalMax,
 	}
 }
 

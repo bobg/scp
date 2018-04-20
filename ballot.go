@@ -1,6 +1,9 @@
 package scp
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+)
 
 // Ballot is an SCP ballot.
 type Ballot struct {
@@ -20,7 +23,16 @@ func (b Ballot) Less(other Ballot) bool {
 	if b.N < other.N {
 		return true
 	}
-	return b.N == other.N && b.X.Less(other.X)
+	if b.N > other.N {
+		return false
+	}
+	if b.X == nil {
+		return other.X != nil
+	}
+	if other.X == nil {
+		return false
+	}
+	return b.X.Less(other.X)
 }
 
 func (b Ballot) Equal(other Ballot) bool {
@@ -30,6 +42,10 @@ func (b Ballot) Equal(other Ballot) bool {
 // Aborts tells whether a vote to prepare b aborts other.
 func (b Ballot) Aborts(other Ballot) bool {
 	return other.N < b.N && !VEqual(other.X, b.X)
+}
+
+func (b Ballot) String() string {
+	return fmt.Sprintf("<%d,%s>", b.N, VString(b.X))
 }
 
 // BallotSet is a set of ballots, implemented as a sorted slice.

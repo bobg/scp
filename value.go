@@ -1,16 +1,28 @@
 package scp
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
 
 // Value is the type of values being voted on by the network.
 type Value interface {
 	Less(Value) bool
 	Combine(Value) Value
 	Bytes() []byte
+	String() string
 }
 
 func VEqual(a, b Value) bool {
 	return !a.Less(b) && !b.Less(a)
+}
+
+func VString(v Value) string {
+	if v == nil {
+		return "<nil>"
+	}
+	return v.String()
 }
 
 // ValueSet is a set of values, implemented as a sorted slice.
@@ -83,4 +95,12 @@ func (vs ValueSet) Combine() Value {
 		result = result.Combine(v)
 	}
 	return result
+}
+
+func (vs ValueSet) String() string {
+	var strs []string
+	for _, v := range vs {
+		strs = append(strs, VString(v))
+	}
+	return fmt.Sprintf("[%s]", strings.Join(strs, " "))
 }

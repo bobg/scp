@@ -1,6 +1,9 @@
 package scp
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 // Env is the envelope of an SCP protocol message.
 type Env struct {
@@ -56,4 +59,8 @@ func (e *Env) acceptsPrepared(b Ballot) bool {
 	}
 
 	return false
+}
+
+func (e *Env) String() string {
+	return fmt.Sprintf("from %s, slot %d: %s", e.V, e.I, e.M)
 }

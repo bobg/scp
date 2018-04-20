@@ -107,9 +107,12 @@ func (n *Node) G(i SlotID, m []byte) (result [32]byte, err error) {
 	return result, nil
 }
 
-func (n *Node) Weight(id NodeID) float64 {
+// Weight returns the fraction of n's quorum slices in which id
+// appears.  Return value is the fraction and (as an optimization) a
+// bool indicating whether it's exactly 1.
+func (n *Node) Weight(id NodeID) (float64, bool) {
 	if id == n.ID {
-		return 1.0
+		return 1.0, true
 	}
 	count := 0
 	for _, slice := range n.Q {
@@ -120,7 +123,10 @@ func (n *Node) Weight(id NodeID) float64 {
 			}
 		}
 	}
-	return float64(count) / float64(len(n.Q))
+	if count == len(n.Q) {
+		return 1.0, true
+	}
+	return float64(count) / float64(len(n.Q)), false
 }
 
 // Peers returns a flattened, uniquified list of the node IDs in n's
@@ -160,10 +166,16 @@ func (n *Node) Neighbors(i SlotID, num int) ([]NodeID, error) {
 	peers = append(peers, n.ID)
 	var result []NodeID
 	for _, nodeID := range peers {
-		w := big.NewFloat(n.Weight(nodeID))
-		w.Mul(w, hmax)
-		hwInt, _ := w.Int(nil)
-		hwBytes := hwInt.Bytes()
+		weight64, is1 := n.Weight(nodeID)
+		var hwBytes []byte
+		if is1 {
+			hwBytes = maxUint256[:]
+		} else {
+			w := big.NewFloat(weight64)
+			w.Mul(w, hmax)
+			hwInt, _ := w.Int(nil)
+			hwBytes = hwInt.Bytes()
+		}
 		var hw [32]byte
 		copy(hw[32-len(hwBytes):], hwBytes) // hw is now a big-endian uint256
 
@@ -198,13 +210,14 @@ func (n *Node) Logf(f string, a ...interface{}) {
 	log.Printf(f, a...)
 }
 
+var maxUint256 = [32]byte{
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+}
+
 func init() {
-	maxUint256 := [32]byte{
-		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	}
 	hmaxInt := new(big.Int)
 	hmaxInt.SetBytes(maxUint256[:])
 	hmax = new(big.Float)
