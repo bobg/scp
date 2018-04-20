@@ -4,11 +4,6 @@ package scp
 type Env struct {
 	V NodeID
 	I SlotID
-	Q QSet
+	Q [][]NodeID
 	M Msg
-}
-
-func (e *Env) Less(other *Env) bool {
-	// xxx do we need to compare e.V, e.I, e.Q? don't think so
-	return e.M.Less(other.M)
 }

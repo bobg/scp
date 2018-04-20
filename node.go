@@ -17,15 +17,20 @@ type NodeID interface {
 }
 
 type Node struct {
-	ID      NodeID
-	Q       QSet
+	ID NodeID
+
+	// Q is the node's set of quorum slices. For compactness it does not
+	// include the node itself, though the node is understood to be in
+	// every slice.
+	Q [][]NodeID
+
 	Pending map[SlotID]*Slot
 	Ext     map[SlotID]*ExtMsg
 
 	mu sync.Mutex
 }
 
-func NewNode(id NodeID, q QSet) *Node {
+func NewNode(id NodeID, q [][]NodeID) *Node {
 	return &Node{
 		ID:      id,
 		Q:       q,

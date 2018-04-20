@@ -1,5 +1,7 @@
 package scp
 
+import "fmt"
+
 // Predicates are passed to the functions herein as interface{}
 // values. Their concrete types must be either func(*Env)bool or
 // predicate. A predicate is able to supply new, modified predicates
@@ -78,7 +80,7 @@ func (s *Slot) findQuorum(pred interface{}) []NodeID {
 // findNodeQuorum is a helper function for findQuorum. It checks that
 // the node has at least one slice whose members (and the transitive
 // closure over them) all satisfy the given predicate.
-func (s *Slot) findNodeQuorum(nodeID NodeID, q QSet, pred interface{}, m map[NodeID]struct{}) map[NodeID]struct{} {
+func (s *Slot) findNodeQuorum(nodeID NodeID, q [][]NodeID, pred interface{}, m map[NodeID]struct{}) map[NodeID]struct{} {
 	for _, slice := range q {
 		m2 := s.findSliceQuorum(slice, pred, m)
 		if len(m2) > 0 {

@@ -41,7 +41,7 @@ func main() {
 	var highestSlot slotIDType
 	for i, arg := range flag.Args() {
 		nodeID := nodeIDType(i + 1)
-		var q scp.QSet
+		var q [][]scp.NodeID
 		for _, slices := range strings.Split(arg, "/") {
 			var qslice []scp.NodeID
 			for _, field := range strings.Fields(slice) {

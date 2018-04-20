@@ -19,9 +19,9 @@ type Slot struct {
 	Z ValueSet // confirmed nominated values
 
 	B      Ballot
-	C      Ballot
+	P, PP  Ballot
+	C, H   Ballot
 	AP, CP []Ballot // accepted-prepared, confirmed-prepared; kept sorted
-	HN     int
 
 	Upd *time.Timer
 }
@@ -50,7 +50,7 @@ const (
 )
 
 func (s *Slot) Handle(env *Env) (*Env, error) {
-	if have, ok := s.M[env.V]; ok && !have.Less(env) {
+	if have, ok := s.M[env.V]; ok && !have.M.Less(env.M) {
 		// We already have a message from this sender that's the same or
 		// newer.
 		return nil, nil
@@ -63,7 +63,7 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 		switch msg := env.M.(type) {
 		case *NomMsg:
 			// nom nom
-			err := s.handleNomMsg(msg)
+			err := s.handleNomMsg(env, msg)
 			if err != nil {
 				return nil, err
 			}
@@ -75,8 +75,8 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 			if !msg.P.IsZero() {
 				s.X.Add(msg.P.X)
 			}
-			if !msg.PPrime.IsZero() {
-				s.X.Add(msg.PPrime.X)
+			if !msg.PP.IsZero() {
+				s.X.Add(msg.PP.X)
 			}
 
 		case *CommitMsg:
@@ -99,7 +99,7 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 		}
 
 	case PhPrep:
-		if msg, ok := env.M.(*NomMsg); ok && s.HN == 0 {
+		if msg, ok := env.M.(*NomMsg); ok && s.H.N == 0 {
 			// Can still update s.Z and s.B.X
 			err := s.handleNomMsg(env, msg)
 			if err != nil {
@@ -108,7 +108,7 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 			s.updateXYZ()
 			s.B.X = s.Z.Combine()
 		} else {
-			// xxx update s.AP, s.CP, s.C, s.HN
+			// xxx update s.AP, s.CP, s.C, s.H
 			if len(s.CP) > 0 && s.B.Less(s.CP[len(s.CP)-1]) {
 				// raise B to the highest confirmed-prepared ballot
 				s.B = s.CP[len(s.CP)-1]
@@ -124,7 +124,7 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 						return env.M.BN() > s.B.N
 					})
 					if len(nodeIDs) > 0 {
-						s.Upd = time.AfterFunc((1+s.B.N)*deferredUpdateInterval, s.deferredUpdate)
+						s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(deferredUpdateInterval)), s.deferredUpdate)
 					}
 				}
 
@@ -150,23 +150,20 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 				}
 			}
 
-			// xxx set p and pp (p')
+			// xxx set s.P and s.PP (p')
 
-			if !s.C.IsZero() && ((!p.IsZero() && s.C.Less(p) && !VEqual(p.X, s.C.X)) || (!pp.IsZero() && s.C.Less(pp) && !VEqual(pp.X, s.C.X))) {
+			if !s.C.IsZero() && ((!s.P.IsZero() && s.C.Less(s.P) && !VEqual(s.P.X, s.C.X)) || (!s.PP.IsZero() && s.C.Less(s.PP) && !VEqual(s.PP.X, s.C.X))) {
 				s.C = ZeroBallot
 			}
-			if s.C.IsZero() && s.HN > 0 {
-				// Check h is not aborted by p or pp.
-				if (p.IsZero() || !p.Aborts(h)) && (pp.IsZero() || !pp.Aborts(h)) {
-					s.C = s.B
-				}
+			if s.C.IsZero() && s.H.N > 0 && !s.P.Aborts(s.H) && !s.PP.Aborts(s.H) {
+				s.C = s.B
 			}
 
 			// The PREPARE phase ends at a node when the statement "commit
 			// b" reaches the accept state in federated voting for some
 			// ballot "b".
 			if !s.C.IsZero() {
-				pred := &acceptCommitPredicate{min: s.C.N, max: s.HN, val: s.B.X}
+				pred := &acceptCommitPredicate{min: s.C.N, max: s.H.N, val: s.B.X}
 				nodeIDs := s.findBlockingSetOrQuorum(pred)
 				if len(nodeIDs) > 0 {
 					// There is a blocking set or quorum that votes-or-accepts
@@ -178,15 +175,15 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 		}
 
 	case PhCommit:
-		// xxx update s.AP, s.CP, s.C, s.HN
-		if s.HN > s.B.N {
-			s.B.N = s.HN
+		// xxx update s.AP, s.CP, s.C, s.H
+		if s.H.N > s.B.N {
+			s.B.N = s.H.N
 		}
 		// xxx update accepted-commit ballots
 
 		// As soon as a node confirms "commit b" for any ballot "b", it
 		// moves to the EXTERNALIZE stage.
-		pred := &confirmCommitPredicate{min: s.C.N, max: s.HN, val: s.B.X}
+		pred := &confirmCommitPredicate{min: s.C.N, max: s.H.N, val: s.B.X}
 		nodeIDs := s.findQuorum(pred)
 		if len(nodeIDs) > 0 {
 			s.Ph = PhExt // \o/
@@ -194,7 +191,7 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 	}
 
 	// Compute a response message.
-	env := &Env{
+	env = &Env{
 		V: s.V.ID,
 		I: s.ID,
 		Q: s.V.Q,
@@ -305,7 +302,7 @@ func (s *Slot) updateXYZ() {
 				return msg.X.Contains(val) || msg.Y.Contains(val)
 
 			case *PrepMsg:
-				return VEqual(msg.B.X, val) || VEqual(msg.P.X, val) || VEqual(msg.PPrime.X, val)
+				return VEqual(msg.B.X, val) || VEqual(msg.P.X, val) || VEqual(msg.PP.X, val)
 
 			case *CommitMsg:
 				return VEqual(msg.B.X, val)
@@ -333,7 +330,7 @@ func (s *Slot) updateXYZ() {
 				return s.Y.Contains(val)
 
 			case *PrepMsg:
-				return VEqual(msg.B.X, val) || VEqual(msg.P.X, val) || VEqual(msg.PPrime.X, val)
+				return VEqual(msg.B.X, val) || VEqual(msg.P.X, val) || VEqual(msg.PP.X, val)
 
 			case *CommitMsg:
 				return VEqual(msg.B.X, val)
@@ -371,7 +368,7 @@ func (p *acceptCommitPredicate) test(env *Env) bool {
 		if msg.CN > p.min {
 			p.nextMin = msg.CN
 		}
-		if msg.HN < msg.max {
+		if msg.HN < p.max {
 			p.nextMax = msg.HN
 		}
 		return true
