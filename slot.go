@@ -16,10 +16,14 @@ type Slot struct {
 
 	X ValueSet // votes for nominate(val)
 	Y ValueSet // votes for accept(nominate(val))
+	Z ValueSet // confirmed nominated values
 
 	B      Ballot
+	C      Ballot
 	AP, CP []Ballot // accepted-prepared, confirmed-prepared; kept sorted
 	HN, CN int
+
+	Upd *time.Timer
 }
 
 type Phase int
@@ -40,7 +44,10 @@ func newSlot(id SlotID, n *Node) *Slot {
 	}
 }
 
-const roundDuration = 100 * time.Millisecond
+const (
+	roundDuration          = 100 * time.Millisecond
+	deferredUpdateInterval = 250 * time.Millisecond
+)
 
 func (s *Slot) Handle(env *Env) (*Env, error) {
 	if have, ok := s.M[env.V]; ok && !have.Less(env) {
@@ -56,31 +63,10 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 		switch msg := env.M.(type) {
 		case *NomMsg:
 			// nom nom
-			round := int(time.Since(s.T) / roundDuration)
-			neighbors, err := s.V.Neighbors(s.ID, round)
+			err := s.handleNomMsg(msg)
 			if err != nil {
 				return nil, err
 			}
-
-			var (
-				maxPriority          [32]byte
-				senderHasMaxPriority bool
-			)
-			for _, neighbor := range neighbors {
-				priority, err := s.V.Priority(s.ID, round, neighbor)
-				if err != nil {
-					return nil, err
-				}
-				if bytes.Compare(priority[:], maxPriority[:]) > 0 {
-					maxPriority = priority
-					senderHasMaxPriority = (neighbor == env.V)
-				}
-			}
-			if !senderHasMaxPriority {
-				return nil, nil
-			}
-			s.X.AddSet(msg.X)
-			s.X.AddSet(msg.Y)
 
 		case *PrepMsg:
 			// Prep msg in nom phase
@@ -104,73 +90,51 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 			s.X.Add(msg.C.X)
 		}
 
-		// Look for values to promote from s.X to s.Y.
-		// xxx there is surely a better way to do this
-		var promote ValueSet
-		for _, val := range s.X {
-			if s.blockingSetOrQuorumExists(func(nodeID NodeID) bool {
-				env, ok := s.M[nodeID]
-				if !ok {
-					return false
-				}
-				switch msg := env.M.(type) {
-				case *NomMsg:
-					return msg.X.Contains(val) || msg.Y.Contains(val)
+		s.updateXYZ()
 
-				case *PrepMsg:
-					return VEqual(msg.B.X, val) || VEqual(msg.P.X, val) || VEqual(msg.PPrime.X, val)
-
-				case *CommitMsg:
-					return VEqual(msg.B.X, val)
-
-				case *ExtMsg:
-					return VEqual(msg.C.X, val)
-				}
-				return false // not reached
-			}) {
-				promote.Add(val)
-			}
-		}
-		for _, val := range promote {
-			s.X.Remove(val)
-			s.Y.Add(val)
-		}
-
-		// Look for values in s.Y to confirm, moving slot to the PREPARE
-		// phase.
-		for _, val := range s.Y {
-			nodeIDs := s.findQuorum(func(nodeID NodeID) bool {
-				env, ok := s.M[nodeID]
-				if !ok {
-					return false
-				}
-				switch msg := env.M.(type) {
-				case *NomMsg:
-					return s.Y.Contains(val)
-
-				case *PrepMsg:
-					return VEqual(msg.B.X, val) || VEqual(msg.P.X, val) || VEqual(msg.PPrime.X, val)
-
-				case *CommitMsg:
-					return VEqual(msg.B.X, val)
-
-				case *ExtMsg:
-					return VEqual(msg.C.X, val)
-				}
-				return false // not reached
-			})
-			if len(nodeIDs) > 0 {
-				s.Ph = PhPrep
-				s.B.N = 1
-				s.B.X = val
-				break
-			}
+		if len(s.Z) > 0 {
+			s.Ph = PhPrep
+			s.B.N = 1
+			s.setBX()
 		}
 
 	case PhPrep:
 		switch msg := env.M.(type) {
 		case *NomMsg:
+			if s.HN == 0 {
+				// Can still update s.Z and s.B.X
+				err := s.handleNomMsg(env, msg)
+				if err != nil {
+					return nil, err
+				}
+				s.updateXYZ()
+				s.B.X = s.Z.Combine()
+			}
+
 		case *PrepMsg:
+			if s.Upd == nil {
+				// Look for a quorum whose b.N's are all greater than s.B.N.
+				nodeIDs := s.findQuorum(func(nodeID NodeID) bool {
+					env, ok := s.M[nodeID]
+					if !ok {
+						return false
+					}
+					var bn int
+					switch msg := env.M.(type) {
+					case *PrepMsg:
+						bn = msg.B.N
+					case *CommitMsg:
+						bn = msg.B.N
+					}
+					return bn > s.B.N
+				})
+				// If such a quorum is found, arm a timer to do a deferred
+				// update.
+				if len(nodeIDs) > 0 {
+					s.Upd = time.AfterFunc((1+s.B.N)*deferredUpdateInterval, s.deferredUpdate)
+				}
+			}
+
 		case *CommitMsg:
 		case *ExtMsg:
 		}
@@ -182,6 +146,20 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 		case *CommitMsg:
 		case *ExtMsg:
 		}
+	}
+}
+
+func (s *Slot) deferredUpdate() {
+	s.Upd = nil
+	s.B.N++
+	s.setBX()
+}
+
+func (s *Slot) setBX() {
+	if len(s.CP) > 0 {
+		s.B.X = s.CP[len(s.CP)-1].X
+	} else {
+		s.B.X = s.Z.Combine()
 	}
 }
 
@@ -276,4 +254,94 @@ func (s *Slot) findSliceQuorum(slice []NodeID, pred func(NodeID) bool, m map[Nod
 		}
 	}
 	return m2
+}
+
+func (s *Slot) handleNomMsg(env *Env, msg *NomMsg) error {
+	round := int(time.Since(s.T) / roundDuration)
+	neighbors, err := s.V.Neighbors(s.ID, round)
+	if err != nil {
+		return err
+	}
+
+	var (
+		maxPriority          [32]byte
+		senderHasMaxPriority bool
+	)
+	for _, neighbor := range neighbors {
+		priority, err := s.V.Priority(s.ID, round, neighbor)
+		if err != nil {
+			return err
+		}
+		if bytes.Compare(priority[:], maxPriority[:]) > 0 {
+			maxPriority = priority
+			senderHasMaxPriority = (neighbor == env.V)
+		}
+	}
+	if senderHasMaxPriority {
+		s.X.AddSet(msg.X)
+		s.X.AddSet(msg.Y)
+	}
+	return nil
+}
+
+func (s *Slot) updateXYZ() {
+	// Look for values to promote from s.X to s.Y.
+	// xxx there is surely a better way to do this
+	var promote ValueSet
+	for _, val := range s.X {
+		if s.blockingSetOrQuorumExists(func(nodeID NodeID) bool {
+			env, ok := s.M[nodeID]
+			if !ok {
+				return false
+			}
+			switch msg := env.M.(type) {
+			case *NomMsg:
+				return msg.X.Contains(val) || msg.Y.Contains(val)
+
+			case *PrepMsg:
+				return VEqual(msg.B.X, val) || VEqual(msg.P.X, val) || VEqual(msg.PPrime.X, val)
+
+			case *CommitMsg:
+				return VEqual(msg.B.X, val)
+
+			case *ExtMsg:
+				return VEqual(msg.C.X, val)
+			}
+			return false // not reached
+		}) {
+			promote.Add(val)
+		}
+	}
+	for _, val := range promote {
+		s.X.Remove(val)
+		s.Y.Add(val)
+	}
+
+	// Look for values in s.Y to confirm, moving slot to the PREPARE
+	// phase.
+	for _, val := range s.Y {
+		nodeIDs := s.findQuorum(func(nodeID NodeID) bool {
+			env, ok := s.M[nodeID]
+			if !ok {
+				return false
+			}
+			switch msg := env.M.(type) {
+			case *NomMsg:
+				return s.Y.Contains(val)
+
+			case *PrepMsg:
+				return VEqual(msg.B.X, val) || VEqual(msg.P.X, val) || VEqual(msg.PPrime.X, val)
+
+			case *CommitMsg:
+				return VEqual(msg.B.X, val)
+
+			case *ExtMsg:
+				return VEqual(msg.C.X, val)
+			}
+			return false // not reached
+		})
+		if len(nodeIDs) > 0 {
+			s.Z.Add(val)
+		}
+	}
 }

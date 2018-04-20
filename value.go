@@ -36,6 +36,24 @@ func (vs *ValueSet) AddSet(other ValueSet) {
 	}
 }
 
+// Remove removes a value from a set.
+// TODO: it's almost like I don't have a CS degree or something.
+func (vs *ValueSet) Remove(v Value) {
+	for i, elt := range *vs {
+		if elt.Less(v) {
+			continue
+		}
+		if v.Less(elt) {
+			return
+		}
+		before := (*vs)[:i]
+		after := (*vs)[i+1:]
+		*vs = append([]Value{}, before...)
+		*vs = append(*vs, after...)
+		return
+	}
+}
+
 // Contains uses binary search to test whether vs contains v.
 func (vs ValueSet) Contains(v Value) bool {
 	if len(vs) == 0 {
@@ -43,9 +61,6 @@ func (vs ValueSet) Contains(v Value) bool {
 	}
 	mid := len(vs) / 2
 	if vs[mid].Less(v) {
-		if mid == len(vs)+1 {
-			return false
-		}
 		return vs[mid+1:].Contains(v)
 	}
 	if v.Less(vs[mid]) {
