@@ -12,9 +12,7 @@ import (
 	"github.com/davecgh/go-xdr/xdr"
 )
 
-type NodeID interface {
-	String() string
-}
+type NodeID string
 
 type Node struct {
 	ID NodeID
@@ -139,7 +137,7 @@ func (n *Node) Peers() []NodeID {
 		}
 	}
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].String() < result[j].String()
+		return result[i] < result[j]
 	})
 	var (
 		to   int
@@ -183,7 +181,7 @@ func (n *Node) Neighbors(i SlotID, num int) ([]NodeID, error) {
 		m.WriteByte('N')
 		numBytes, _ := xdr.Marshal(num)
 		m.Write(numBytes)
-		m.WriteString(nodeID.String())
+		m.WriteString(string(nodeID))
 		g, err := n.G(i, m.Bytes())
 		if err != nil {
 			return nil, err
@@ -200,7 +198,7 @@ func (n *Node) Priority(i SlotID, num int, nodeID NodeID) ([32]byte, error) {
 	m.WriteByte('P')
 	numBytes, _ := xdr.Marshal(num)
 	m.Write(numBytes)
-	m.WriteString(nodeID.String())
+	m.WriteString(string(nodeID))
 	return n.G(i, m.Bytes())
 }
 

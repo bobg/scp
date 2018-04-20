@@ -21,12 +21,6 @@ type entry struct {
 	ch   chan *scp.Env
 }
 
-type nodeIDType int
-
-func (n nodeIDType) String() string {
-	return strconv.Itoa(int(n))
-}
-
 type valType int
 
 func (v valType) Less(other scp.Value) bool {
@@ -57,33 +51,31 @@ func main() {
 	flag.Parse()
 	rand.Seed(*seed)
 
-	entries := []entry{entry{}} // nodes are numbered starting at 1, put a placeholder in position 0
+	entries := make(map[scp.NodeID]entry)
 
-	ch := make(chan *scp.Env)
+	ch := make(chan *scp.Env, 5)
 	var highestSlot int32
 	for i, arg := range flag.Args() {
-		nodeID := nodeIDType(i + 1)
+		nodeID := scp.NodeID(strconv.Itoa(i + 1))
 		var q [][]scp.NodeID
 		for _, slices := range strings.Split(arg, "/") {
 			var qslice []scp.NodeID
 			for _, field := range strings.Fields(slices) {
-				f, err := strconv.Atoi(field)
-				if err != nil {
-					log.Fatal(err)
-				}
-				if f <= 0 || f == int(nodeID) {
-					log.Print("skipping quorum slice member %d for node %d", f, nodeID)
+				if field == string(nodeID) {
+					log.Print("skipping quorum slice member %s for node %s", field, nodeID)
 					continue
 				}
-				qslice = append(qslice, nodeID)
+				qslice = append(qslice, scp.NodeID(field))
 			}
 			q = append(q, qslice)
 		}
 		nodeCh := make(chan *scp.Env)
 		e := entry{node: scp.NewNode(nodeID, q), ch: nodeCh}
-		entries = append(entries, e)
+		entries[nodeID] = e
 		go nodefn(e.node, e.ch, ch, &highestSlot)
 	}
+
+	// log.Print(spew.Sdump(entries))
 
 	for env := range ch {
 		if _, ok := env.M.(*scp.NomMsg); !ok && int32(env.I) > highestSlot { // this is the only thread that writes highestSlot, so it's ok to read it non-atomically
@@ -91,10 +83,12 @@ func main() {
 			log.Printf("highestSlot is now %d", highestSlot)
 		}
 
+		peers := entries[env.V].node.Peers()
+		log.Printf("main: dispatching to %s, msg: %s", peers, env)
+
 		// Send this message to each of the node's peers.
-		nodeID := env.V.(nodeIDType)
-		for _, peerID := range entries[nodeID].node.Peers() {
-			entries[peerID.(nodeIDType)].ch <- env
+		for _, peerID := range peers {
+			entries[peerID].ch <- env
 		}
 	}
 }
@@ -118,15 +112,15 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 			timer.Stop()
 			close(timeCh)
 
-			n.Logf("handling %s", env)
-
 			res, err := n.Handle(env)
 			if err != nil {
 				n.Logf("could not handle %s: %s", env, err)
 				continue
 			}
-			if res != nil {
-				n.Logf("responding %s", res)
+			if res == nil {
+				n.Logf("ignored %s", env)
+			} else {
+				n.Logf("handled %s -> %s", env, res)
 				send <- res
 			}
 

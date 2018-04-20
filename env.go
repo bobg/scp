@@ -62,5 +62,5 @@ func (e *Env) acceptsPrepared(b Ballot) bool {
 }
 
 func (e *Env) String() string {
-	return fmt.Sprintf("from %s, slot %d: %s", e.V, e.I, e.M)
+	return fmt.Sprintf("(V=%s, I=%d: %s)", e.V, e.I, e.M)
 }
