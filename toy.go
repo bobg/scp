@@ -56,7 +56,7 @@ func main() {
 	entries := []entry{entry{}} // nodes are numbered starting at 1, put a placeholder in position 0
 
 	ch := make(chan *scp.Env)
-	var highestSlot scp.SlotID
+	var highestSlot int32
 	for i, arg := range flag.Args() {
 		nodeID := nodeIDType(i + 1)
 		var q [][]scp.NodeID
@@ -82,8 +82,8 @@ func main() {
 	}
 
 	for env := range ch {
-		if env.I > highestSlot { // this is the only thread that writes highestSlot, so it's ok to read it non-atomically
-			atomic.StoreInt32((*int32)(&highestSlot), int32(env.I))
+		if int32(env.I) > highestSlot { // this is the only thread that writes highestSlot, so it's ok to read it non-atomically
+			atomic.StoreInt32(&highestSlot, int32(env.I))
 		}
 
 		// Send this message to each of the node's peers.
@@ -100,7 +100,7 @@ const (
 )
 
 // runs as a goroutine
-func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot *scp.SlotID) {
+func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot *int32) {
 	for {
 		// Some time in the next minNomDelayMS to maxNomDelayMS
 		// milliseconds, nominate a value for a new slot.
@@ -124,7 +124,7 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 
 		case <-timeCh:
 			val := valType(rand.Intn(20))
-			slotID := 1 + atomic.LoadInt32((*int32)(highestSlot))
+			slotID := 1 + atomic.LoadInt32(highestSlot)
 
 			// Send a nominate message "from" the node to itself. If it has
 			// max priority among its neighbors (for this slot) it will
