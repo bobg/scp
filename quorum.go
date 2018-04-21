@@ -1,39 +1,26 @@
 package scp
 
-import "fmt"
-
-// Predicates are passed to the functions herein as interface{}
-// values. Their concrete types must be either func(*Env)bool or
-// predicate. A predicate is able to supply new, modified predicates
-// as these functions explore the space of candidate nodes, with
-// unwinding.
-
 type predicate interface {
 	test(*Env) bool
+
+	// next allows a predicate to update itself after each successful
+	// call to test, by returning a modified copy of itself for the next
+	// call. When findBlockingSet or findQuorum needs to backtrack, they
+	// also unwind to earlier versions of the predicate.
 	next() predicate
 }
 
-func doTest(env *Env, p interface{}) bool {
-	switch p := p.(type) {
-	case func(*Env) bool:
-		return p(env)
-	case predicate:
-		return p.test(env)
-	}
-	panic(fmt.Errorf("got %T, want func(*Env)bool or predicate", p))
+type fpred func(*Env) bool
+
+func (f fpred) test(env *Env) bool {
+	return f(env)
 }
 
-func getNext(p interface{}) interface{} {
-	switch p := p.(type) {
-	case func(*Env) bool:
-		return p
-	case predicate:
-		return p.next()
-	}
-	panic(fmt.Errorf("got %T, want func(*Env)bool or predicate", p))
+func (f fpred) next() predicate {
+	return f
 }
 
-func (s *Slot) findBlockingSetOrQuorum(pred interface{}) []NodeID {
+func (s *Slot) findBlockingSetOrQuorum(pred predicate) []NodeID {
 	nodeIDs := s.findBlockingSet(pred)
 	if len(nodeIDs) > 0 {
 		return nodeIDs
@@ -42,17 +29,17 @@ func (s *Slot) findBlockingSetOrQuorum(pred interface{}) []NodeID {
 }
 
 // Checks that at least one node in each quorum slice satisfies pred.
-func (s *Slot) findBlockingSet(pred interface{}) []NodeID {
+func (s *Slot) findBlockingSet(pred predicate) []NodeID {
 	return s.findBlockingSetHelper(s.V.Q, nil, pred)
 }
 
-func (s *Slot) findBlockingSetHelper(slices [][]NodeID, ids []NodeID, pred interface{}) []NodeID {
+func (s *Slot) findBlockingSetHelper(slices [][]NodeID, ids []NodeID, pred predicate) []NodeID {
 	if len(slices) == 0 {
 		return ids
 	}
 	for _, nodeID := range slices[0] {
-		if env, ok := s.M[nodeID]; ok && doTest(env, pred) {
-			nextPred := getNext(pred)
+		if env, ok := s.M[nodeID]; ok && pred.test(env) {
+			nextPred := pred.next()
 			res := s.findBlockingSetHelper(slices[1:], append(ids, nodeID), nextPred)
 			if len(res) > 0 {
 				return res
@@ -64,7 +51,7 @@ func (s *Slot) findBlockingSetHelper(slices [][]NodeID, ids []NodeID, pred inter
 
 // findQuorum finds a quorum containing the slot's node in which every
 // node satisfies the given predicate.
-func (s *Slot) findQuorum(pred interface{}) []NodeID {
+func (s *Slot) findQuorum(pred predicate) []NodeID {
 	m := make(map[NodeID]struct{})
 	m[s.V.ID] = struct{}{}
 	m, _ = s.findNodeQuorum(s.V.ID, s.V.Q, pred, m)
@@ -81,7 +68,7 @@ func (s *Slot) findQuorum(pred interface{}) []NodeID {
 // findNodeQuorum is a helper function for findQuorum. It checks that
 // the node has at least one slice whose members (and the transitive
 // closure over them) all satisfy the given predicate.
-func (s *Slot) findNodeQuorum(nodeID NodeID, q [][]NodeID, pred interface{}, m map[NodeID]struct{}) (map[NodeID]struct{}, interface{}) {
+func (s *Slot) findNodeQuorum(nodeID NodeID, q [][]NodeID, pred predicate, m map[NodeID]struct{}) (map[NodeID]struct{}, predicate) {
 	for _, slice := range q {
 		// s.V.Logf("** findNodeQuorum(%s), slice %s", nodeID, slice)
 		m2, nextPred := s.findSliceQuorum(slice, pred, m)
@@ -97,7 +84,7 @@ func (s *Slot) findNodeQuorum(nodeID NodeID, q [][]NodeID, pred interface{}, m m
 // findSliceQuorum is a helper function for findNodeQuorum. It checks
 // whether every node in a given quorum slice (and the transitive
 // closure over them) satisfies the given predicate.
-func (s *Slot) findSliceQuorum(slice []NodeID, pred interface{}, m map[NodeID]struct{}) (map[NodeID]struct{}, interface{}) {
+func (s *Slot) findSliceQuorum(slice []NodeID, pred predicate, m map[NodeID]struct{}) (map[NodeID]struct{}, predicate) {
 	var newNodeIDs []NodeID
 	for _, nodeID := range slice {
 		if _, ok := m[nodeID]; !ok {
@@ -111,11 +98,11 @@ func (s *Slot) findSliceQuorum(slice []NodeID, pred interface{}, m map[NodeID]st
 	// s.V.Logf("** findSliceQuorum: new nodes %s", newNodeIDs)
 	origPred := pred
 	for _, nodeID := range newNodeIDs {
-		if env, ok := s.M[nodeID]; !ok || !doTest(env, pred) {
+		if env, ok := s.M[nodeID]; !ok || !pred.test(env) {
 			// s.V.Logf("** findSliceQuorum: failed on %s", nodeID)
 			return nil, origPred
 		}
-		pred = getNext(pred)
+		pred = pred.next()
 	}
 	m2 := make(map[NodeID]struct{})
 	for nodeID := range m {

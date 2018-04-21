@@ -132,9 +132,9 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 					continue
 				}
 				s.V.Logf("** trying to confirm prepared %s", ap)
-				nodeIDs := s.findQuorum(func(env *Env) bool {
+				nodeIDs := s.findQuorum(fpred(func(env *Env) bool {
 					return env.acceptsPrepared(ap)
-				})
+				}))
 				if len(nodeIDs) > 0 {
 					s.V.Logf("** confirmed prepared %s", ap)
 					cps = append(cps, ap)
@@ -176,12 +176,14 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 			// ballot "b".
 			if !s.C.IsZero() && !s.H.IsZero() {
 				var cn, hn int
-				pred := &acceptCommitPredicate{
+				pred := &minMaxPred{
 					min:      s.C.N,
 					max:      s.H.N,
-					val:      s.B.X,
 					finalMin: &cn,
 					finalMax: &hn,
+					testfn: func(env *Env, min, max int) (bool, int, int) {
+						return env.votesOrAcceptsCommit(s.B.X, min, max)
+					},
 				}
 				nodeIDs := s.findBlockingSetOrQuorum(pred)
 				if len(nodeIDs) > 0 {
@@ -201,14 +203,16 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 
 		// Update the accepted-commit bounds.
 		var acmin, acmax int
-		acpred := &acceptCommitPredicate{
+		acpred := &minMaxPred{
 			min:      s.C.N,
 			max:      math.MaxInt32,
-			val:      s.B.X,
 			finalMin: &acmin,
 			finalMax: &acmax,
+			testfn: func(env *Env, min, max int) (bool, int, int) {
+				return env.votesOrAcceptsCommit(s.B.X, min, max)
+			},
 		}
-		nodeIDs := s.findQuorum(acpred)
+		nodeIDs := s.findBlockingSetOrQuorum(acpred)
 		if len(nodeIDs) > 0 {
 			s.C.N = acmin
 			s.H.N = acmax
@@ -217,14 +221,16 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 		// As soon as a node confirms "commit b" for any ballot "b", it
 		// moves to the EXTERNALIZE stage.
 		var cn, hn int
-		pred := &confirmCommitPredicate{
+		ccpred := &minMaxPred{
 			min:      s.C.N,
 			max:      s.H.N,
-			val:      s.B.X,
 			finalMin: &cn,
 			finalMax: &hn,
+			testfn: func(env *Env, min, max int) (bool, int, int) {
+				return env.acceptsCommit(s.B.X, min, max)
+			},
 		}
-		nodeIDs = s.findQuorum(pred)
+		nodeIDs = s.findQuorum(ccpred)
 		if len(nodeIDs) > 0 {
 			s.Ph = PhExt // \o/
 			s.C.N = cn
@@ -233,11 +239,7 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 	}
 
 	// Compute a response message.
-	env = &Env{
-		V: s.V.ID,
-		I: s.ID,
-		Q: s.V.Q,
-	}
+	env = NewEnv(s.V.ID, s.ID, s.V.Q, nil)
 	switch s.Ph {
 	case PhNom:
 		if len(s.X) == 0 && len(s.Y) == 0 {
@@ -345,7 +347,7 @@ func (s *Slot) updateXYZ() {
 	// xxx there is surely a better way to do this
 	var promote ValueSet
 	for _, val := range s.X {
-		nodeIDs := s.findBlockingSetOrQuorum(func(env *Env) bool {
+		nodeIDs := s.findBlockingSetOrQuorum(fpred(func(env *Env) bool {
 			switch msg := env.M.(type) {
 			case *NomMsg:
 				return msg.X.Contains(val) || msg.Y.Contains(val)
@@ -360,7 +362,7 @@ func (s *Slot) updateXYZ() {
 				return VEqual(msg.C.X, val)
 			}
 			return false // not reached
-		})
+		}))
 		if len(nodeIDs) > 0 {
 			promote.Add(val)
 		}
@@ -374,7 +376,7 @@ func (s *Slot) updateXYZ() {
 	// Look for values in s.Y to confirm, moving slot to the PREPARE
 	// phase.
 	for _, val := range s.Y {
-		nodeIDs := s.findQuorum(func(env *Env) bool {
+		nodeIDs := s.findQuorum(fpred(func(env *Env) bool {
 			switch msg := env.M.(type) {
 			case *NomMsg:
 				return s.Y.Contains(val)
@@ -389,7 +391,7 @@ func (s *Slot) updateXYZ() {
 				return VEqual(msg.C.X, val)
 			}
 			return false // not reached
-		})
+		}))
 		if len(nodeIDs) > 0 {
 			s.Z.Add(val)
 			s.V.Logf("* confirmed %s", val)
@@ -399,135 +401,48 @@ func (s *Slot) updateXYZ() {
 	}
 }
 
-type acceptCommitPredicate struct {
+type minMaxPred struct {
 	min, max           int
-	val                Value
 	nextMin, nextMax   int
 	finalMin, finalMax *int
+	testfn             func(env *Env, min, max int) (bool, int, int)
 }
 
-func (p *acceptCommitPredicate) test(env *Env) bool {
+func (p *minMaxPred) test(env *Env) bool {
 	p.nextMin, p.nextMax = p.min, p.max
 	if p.min > p.max {
 		return false
 	}
-	switch msg := env.M.(type) {
-	case *PrepMsg:
-		if msg.CN == 0 || !VEqual(msg.B.X, p.val) {
-			return false
-		}
-		if msg.CN > p.max || msg.HN < p.min {
-			return false
-		}
-		if msg.CN > p.min {
-			p.nextMin = msg.CN
-		}
-		if msg.HN < p.max {
-			p.nextMax = msg.HN
-		}
-		return true
-
-	case *CommitMsg:
-		if !VEqual(msg.B.X, p.val) {
-			return false
-		}
-		if msg.CN > p.max {
-			return false
-		}
-		if msg.CN > p.min {
-			p.nextMin = msg.CN
-		}
-		return true
-
-	case *ExtMsg:
-		if !VEqual(msg.C.X, p.val) {
-			return false
-		}
-		if msg.C.N > p.max {
-			return false
-		}
-		if msg.C.N > p.min {
-			p.nextMin = msg.C.N
-		}
-		return true
-	}
-
-	return false
-}
-
-func (p *acceptCommitPredicate) next() predicate {
-	*p.finalMin = p.nextMin
-	*p.finalMax = p.nextMax
-	return &acceptCommitPredicate{
-		min:      p.nextMin,
-		max:      p.nextMax,
-		val:      p.val,
-		finalMin: p.finalMin,
-		finalMax: p.finalMax,
-	}
-}
-
-type confirmCommitPredicate struct {
-	min, max           int
-	val                Value
-	nextMin, nextMax   int
-	finalMin, finalMax *int
-}
-
-func (p *confirmCommitPredicate) test(env *Env) bool {
-	p.nextMin, p.nextMax = p.min, p.max
-	if p.min > p.max {
+	res, min, max := p.testfn(env, p.min, p.max)
+	if !res {
 		return false
 	}
-	switch msg := env.M.(type) {
-	case *CommitMsg:
-		if !VEqual(msg.B.X, p.val) {
-			return false
-		}
-		if msg.CN > p.max || msg.HN < p.min {
-			return false
-		}
-		if msg.CN > p.min {
-			p.nextMin = msg.CN
-		}
-		if msg.HN < p.max {
-			p.nextMax = msg.HN
-		}
-		return true
-
-	case *ExtMsg:
-		if !VEqual(msg.C.X, p.val) {
-			return false
-		}
-		if msg.C.N > p.max {
-			return false
-		}
-		if msg.C.N > p.min {
-			p.nextMin = msg.C.N
-		}
-		return true
-	}
-	return false
+	p.nextMin, p.nextMax = min, max
+	return true
 }
 
-func (p *confirmCommitPredicate) next() predicate {
-	*p.finalMin = p.nextMin
-	*p.finalMax = p.nextMax
-	return &confirmCommitPredicate{
+func (p *minMaxPred) next() predicate {
+	if p.finalMin != nil {
+		*p.finalMin = p.nextMin
+	}
+	if p.finalMax != nil {
+		*p.finalMax = p.nextMax
+	}
+	return &minMaxPred{
 		min:      p.nextMin,
 		max:      p.nextMax,
-		val:      p.val,
 		finalMin: p.finalMin,
 		finalMax: p.finalMax,
+		testfn:   p.testfn,
 	}
 }
 
 // Update s.AP - the set of accepted-prepared ballots.
 func (s *Slot) updateAP() {
 	if !s.AP.Contains(s.B) {
-		nodeIDs := s.findBlockingSetOrQuorum(func(env *Env) bool {
+		nodeIDs := s.findBlockingSetOrQuorum(fpred(func(env *Env) bool {
 			return env.votesOrAcceptsPrepared(s.B)
-		})
+		}))
 		if len(nodeIDs) > 0 {
 			s.AP.Add(s.B)
 		}
@@ -541,9 +456,9 @@ func (s *Slot) updateB() {
 	// node arms a timer for its local "ballot.counter + 1"
 	// seconds.
 	if s.Upd == nil { // don't bother if a timer's already armed
-		nodeIDs := s.findQuorum(func(env *Env) bool {
+		nodeIDs := s.findQuorum(fpred(func(env *Env) bool {
 			return env.M.BN() > s.B.N
-		})
+		}))
 		if len(nodeIDs) > 0 {
 			s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(deferredUpdateInterval)), s.deferredUpdate)
 		}
@@ -555,9 +470,9 @@ func (s *Slot) updateB() {
 	// "ballot.counter" to the lowest value such that this is no
 	// longer the case.  (When doing so, it also disables any
 	// pending timers associated with the old "counter".)
-	nodeIDs := s.findBlockingSet(func(env *Env) bool {
+	nodeIDs := s.findBlockingSet(fpred(func(env *Env) bool {
 		return env.M.BN() > s.B.N
-	})
+	}))
 	if len(nodeIDs) > 0 {
 		s.cancelUpd()
 		for i, nodeID := range nodeIDs {

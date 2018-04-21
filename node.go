@@ -49,12 +49,7 @@ func (n *Node) Handle(env *Env) (*Env, error) {
 		if _, ok = env.M.(*ExtMsg); ok {
 			return nil, nil
 		}
-		return &Env{
-			V: n.ID,
-			I: env.I,
-			Q: n.Q,
-			M: msg,
-		}, nil
+		return NewEnv(n.ID, env.I, n.Q, msg), nil
 	}
 
 	var isNew bool

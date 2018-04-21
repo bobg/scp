@@ -57,7 +57,7 @@ func main() {
 
 	entries := make(map[scp.NodeID]entry)
 
-	ch := make(chan *scp.Env, 1000)
+	ch := make(chan *scp.Env, 10000)
 	var highestSlot int32
 	for _, arg := range flag.Args() {
 		parts := strings.SplitN(arg, ":", 2)
@@ -75,7 +75,7 @@ func main() {
 			q = append(q, qslice)
 		}
 		node := scp.NewNode(nodeID, q)
-		nodeCh := make(chan *scp.Env)
+		nodeCh := make(chan *scp.Env, 1000)
 		entries[nodeID] = entry{node: node, ch: nodeCh}
 		go nodefn(node, nodeCh, ch, &highestSlot)
 	}
@@ -138,14 +138,7 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 			// propagate the nomination.
 			var vs scp.ValueSet
 			vs.Add(val)
-			env := &scp.Env{
-				V: n.ID,
-				I: scp.SlotID(slotID),
-				Q: n.Q,
-				M: &scp.NomMsg{
-					X: vs,
-				},
-			}
+			env := scp.NewEnv(n.ID, scp.SlotID(slotID), n.Q, &scp.NomMsg{X: vs})
 			n.Logf("trying to get something started with %s", env)
 			res, err := n.Handle(env)
 			if err != nil {
