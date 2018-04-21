@@ -88,12 +88,12 @@ func main() {
 			log.Printf("highestSlot is now %d", highestSlot)
 		}
 
-		peers := entries[env.V].node.Peers()
-		log.Printf("main: dispatching to %s, msg: %s", peers, env)
-
-		// Send this message to each of the node's peers.
-		for _, peerID := range peers {
-			entries[peerID].ch <- env
+		// Send this message to every other node.
+		for nodeID, entry := range entries {
+			if nodeID == env.V {
+				continue
+			}
+			entry.ch <- env
 		}
 	}
 }
@@ -122,9 +122,7 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 				n.Logf("could not handle %s: %s", env, err)
 				continue
 			}
-			if res == nil {
-				n.Logf("ignored %s", env)
-			} else {
+			if res != nil {
 				n.Logf("handled %s -> %s", env, res)
 				send <- res
 			}
@@ -161,4 +159,6 @@ var foods = []valType{
 	"salads",
 	"gyros",
 	"indian",
+	"soup",
+	"pasta",
 }

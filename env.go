@@ -172,5 +172,5 @@ func (e *Env) acceptsCommit(v Value, min, max int) (bool, int, int) {
 }
 
 func (e *Env) String() string {
-	return fmt.Sprintf("(C=%d V=%s, I=%d: %s)", e.C, e.V, e.I, e.M)
+	return fmt.Sprintf("(C=%d V=%s I=%d: %s)", e.C, e.V, e.I, e.M)
 }

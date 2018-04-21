@@ -46,7 +46,7 @@ func (b Ballot) Aborts(other Ballot) bool {
 
 func (b Ballot) String() string {
 	if b.IsZero() {
-		return "<nil>"
+		return "<>"
 	}
 	return fmt.Sprintf("<%d,%s>", b.N, VString(b.X))
 }
