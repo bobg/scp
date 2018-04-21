@@ -14,6 +14,7 @@ import (
 
 type NodeID string
 
+// Node is the type of a participating SCP node.
 type Node struct {
 	ID NodeID
 
@@ -22,12 +23,17 @@ type Node struct {
 	// every slice.
 	Q [][]NodeID
 
+	// Pending holds Slot objects during nomination and balloting.
 	Pending map[SlotID]*Slot
-	Ext     map[SlotID]*ExtMsg
+
+	// Ext holds externalized values for slots that have completed
+	// balloting.
+	Ext map[SlotID]*ExtMsg
 
 	mu sync.Mutex
 }
 
+// NewNode produces a new node.
 func NewNode(id NodeID, q [][]NodeID) *Node {
 	return &Node{
 		ID:      id,
@@ -37,6 +43,10 @@ func NewNode(id NodeID, q [][]NodeID) *Node {
 	}
 }
 
+// Handle processes an incoming protocol message. Returns an outbound
+// protocol message in response, or nil if the incoming message is
+// ignored. (A message is ignored if it's invalid, redundant, or older
+// than another message already received from the same sender.)
 func (n *Node) Handle(env *Env) (*Env, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -55,7 +65,6 @@ func (n *Node) Handle(env *Env) (*Env, error) {
 	var isNew bool
 	s, ok := n.Pending[env.I]
 	if !ok {
-		// n.Logf("* creating new slot %d", env.I)
 		s = newSlot(env.I, n)
 		isNew = true
 		n.Pending[env.I] = s
@@ -79,7 +88,6 @@ func (n *Node) Handle(env *Env) (*Env, error) {
 		// Handling the inbound message resulted in externalizing a value.
 		// We can now save the EXTERNALIZE message and get rid of the Slot
 		// object.
-		// n.Logf("* saving ext msg %s for slot %d", extMsg, env.I)
 		n.Ext[env.I] = extMsg
 		delete(n.Pending, env.I)
 	}
@@ -161,9 +169,9 @@ func (n *Node) Peers() []NodeID {
 	return result[:to]
 }
 
-// maxuint256, as a float
-var hmax *big.Float
-
+// Neighbors produces a deterministic subset of a node's peers (which
+// may include itself) that is specific to a given slot and
+// nomination-round.
 func (n *Node) Neighbors(i SlotID, num int) ([]NodeID, error) {
 	peers := n.Peers()
 	peers = append(peers, n.ID)
@@ -198,6 +206,8 @@ func (n *Node) Neighbors(i SlotID, num int) ([]NodeID, error) {
 	return result, nil
 }
 
+// Priority computes a priority for a given peer node that is specific
+// to a given slot and nomination-round.
 func (n *Node) Priority(i SlotID, num int, nodeID NodeID) ([32]byte, error) {
 	m := new(bytes.Buffer)
 	m.WriteByte('P')
@@ -207,6 +217,7 @@ func (n *Node) Priority(i SlotID, num int, nodeID NodeID) ([32]byte, error) {
 	return n.G(i, m.Bytes())
 }
 
+// Logf produces log output prefixed with the node's identity.
 func (n *Node) Logf(f string, a ...interface{}) {
 	f = "node %s: " + f
 	a = append([]interface{}{n.ID}, a...)
@@ -219,6 +230,9 @@ var maxUint256 = [32]byte{
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 }
+
+// maxuint256, as a float
+var hmax *big.Float
 
 func init() {
 	hmaxInt := new(big.Int)

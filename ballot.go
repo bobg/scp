@@ -19,6 +19,7 @@ func (b Ballot) IsZero() bool {
 	return b.N == 0 && b.X == nil
 }
 
+// Less tells whether a ballot is less than another.
 func (b Ballot) Less(other Ballot) bool {
 	if b.N < other.N {
 		return true
@@ -35,15 +36,17 @@ func (b Ballot) Less(other Ballot) bool {
 	return b.X.Less(other.X)
 }
 
+// Equal tells whether a ballot is equal to another.
 func (b Ballot) Equal(other Ballot) bool {
 	return b.N == other.N && VEqual(b.X, other.X)
 }
 
-// Aborts tells whether a vote to prepare b aborts other.
+// Aborts tells whether a vote to prepare one ballot aborts another.
 func (b Ballot) Aborts(other Ballot) bool {
 	return other.N < b.N && !VEqual(other.X, b.X)
 }
 
+// String produces a readable representation of a ballot.
 func (b Ballot) String() string {
 	if b.IsZero() {
 		return "<>"

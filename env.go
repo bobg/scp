@@ -7,15 +7,16 @@ import (
 
 // Env is the envelope of an SCP protocol message.
 type Env struct {
-	C int32
-	V NodeID
-	I SlotID
-	Q [][]NodeID
-	M Msg
+	C int32      // A counter for identifying this envelope, does not participate in the protocol.
+	V NodeID     // ID of the node sending this message.
+	I SlotID     // ID of the slot that this message is about.
+	Q [][]NodeID // Quorum slices of the sending node.
+	M Msg        // The payload: a *NomMsg, *PrepMsg, *CommitMsg, or *ExtMsg.
 }
 
 var msgCounter int32
 
+// NewEnv produces a new envelope.
 func NewEnv(v NodeID, i SlotID, q [][]NodeID, m Msg) *Env {
 	c := atomic.AddInt32(&msgCounter, 1)
 	return &Env{
@@ -27,6 +28,7 @@ func NewEnv(v NodeID, i SlotID, q [][]NodeID, m Msg) *Env {
 	}
 }
 
+// Tells whether e votes nominate(v) or accepts nominate(v).
 func (e *Env) votesOrAcceptsNominated(v Value) bool {
 	if e.acceptsNominated(v) {
 		return true
@@ -35,6 +37,7 @@ func (e *Env) votesOrAcceptsNominated(v Value) bool {
 	return ok && msg.X.Contains(v)
 }
 
+// Tells whether e accepts nominate(v).
 func (e *Env) acceptsNominated(v Value) bool {
 	switch msg := e.M.(type) {
 	case *NomMsg:
@@ -52,8 +55,7 @@ func (e *Env) acceptsNominated(v Value) bool {
 	return false // not reached
 }
 
-// Tells whether this message votes for or accepts as prepared the
-// given ballot.
+// Tells whether e votes prepared(b) or accepts prepared(b).
 func (e *Env) votesOrAcceptsPrepared(b Ballot) bool {
 	if e.acceptsPrepared(b) {
 		return true
@@ -62,7 +64,7 @@ func (e *Env) votesOrAcceptsPrepared(b Ballot) bool {
 	return ok && b.Equal(msg.B)
 }
 
-// Tells whether this message accepts as prepared the given ballot.
+// Tells whether e accepts prepared(b).
 func (e *Env) acceptsPrepared(b Ballot) bool {
 	switch msg := e.M.(type) {
 	case *PrepMsg:
@@ -93,12 +95,14 @@ func (e *Env) acceptsPrepared(b Ballot) bool {
 	return false
 }
 
-// Tells whether e accepts as committed any ballots with the given
-// value and counter in the given range. If it does, it returns the
-// min/max range of such ballots it does accept (i.e., the overlap
-// with the input min/max).
+// Tells whether e votes commit(b) or accepts commit(b) for any ballot
+// b whose value is v and whose counter is in the range [min,max]
+// (inclusive). If so, returns the new min/max that is the overlap
+// between the input and what e votes for or accepts.
 func (e *Env) votesOrAcceptsCommit(v Value, min, max int) (bool, int, int) {
 	if res, newMin, newMax := e.acceptsCommit(v, min, max); res {
+		// xxx newMin/newMax might be too narrow after accounting only for
+		// "accepts" and not yet for "votes." do we care?
 		return true, newMin, newMax
 	}
 	switch msg := e.M.(type) {
@@ -132,10 +136,10 @@ func (e *Env) votesOrAcceptsCommit(v Value, min, max int) (bool, int, int) {
 	return false, 0, 0
 }
 
-// Tells whether e accepts as committed any ballots with the given
-// value and counter in the given range. If it does, it returns the
-// min/max range of such ballots it does accept (i.e., the overlap
-// with the input min/max).
+// Tells whether e accepts commit(b) for any ballot b whose value is v
+// and whose counter is in the range [min,max] (inclusive). If so,
+// returns the new min/max that is the overlap between the input and
+// what e accepts.
 func (e *Env) acceptsCommit(v Value, min, max int) (bool, int, int) {
 	switch msg := e.M.(type) {
 	case *CommitMsg:
@@ -171,6 +175,7 @@ func (e *Env) acceptsCommit(v Value, min, max int) (bool, int, int) {
 	return false, 0, 0
 }
 
+// String produces a readable representation of an envelope.
 func (e *Env) String() string {
 	return fmt.Sprintf("(C=%d V=%s I=%d: %s)", e.C, e.V, e.I, e.M)
 }

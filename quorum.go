@@ -1,24 +1,30 @@
 package scp
 
-type predicate interface {
-	test(*Env) bool
-
-	// next allows a predicate to update itself after each successful
-	// call to test, by returning a modified copy of itself for the next
-	// call. When findBlockingSet or findQuorum needs to backtrack, they
-	// also unwind to earlier versions of the predicate.
-	next() predicate
-}
-
-type fpred func(*Env) bool
-
-func (f fpred) test(env *Env) bool {
-	return f(env)
-}
-
-func (f fpred) next() predicate {
-	return f
-}
+// This file contains functions for finding "blocking sets" and
+// "quorums" that satisfy a given predicate.
+//
+// Each node specifies one or more "quorum slices." Each quorum slice
+// is a set of trusted peer nodes. Each quorum slice conceptually
+// includes the node itself, though in this implementation that is not
+// explicit.
+//
+// A quorum slice is not necessarily a quorum in itself. A peer in a
+// quorum slice may have a dependency on a third-party node, as may
+// that node, and so on. A quorum (with respect to a given node) is
+// thus the transitive closure over any of its quorum slices. A node
+// may have many different quorums, and they may overlap one another.
+//
+// Every protocol message includes the sending node's set of quorum
+// slices. Every node saves the latest message seen from a given
+// node. If enough messages have been seen, it is possible for a node
+// to know the complete membership of one or more quorums.
+//
+// A "blocking set" is related to the idea of a quorum, but is
+// simpler. It's any set of peers among a node's quorum slices that
+// blocks the possibility of a quorum. A blocking set satisfying
+// statement X precludes the possibility of a quorum satisfying !X.  A
+// single peer from each of a node's quorum slices is sufficient to
+// form a blocking set.
 
 func (s *Slot) findBlockingSetOrQuorum(pred predicate) []NodeID {
 	nodeIDs := s.findBlockingSet(pred)
@@ -122,6 +128,29 @@ func (s *Slot) findSliceQuorum(slice []NodeID, pred predicate, m map[NodeID]stru
 	}
 	// s.V.Logf("** findSliceQuorum: success")
 	return m2, pred
+}
+
+// Abstract predicate. Concrete types below.
+type predicate interface {
+	test(*Env) bool
+
+	// next allows a predicate to update itself after each successful
+	// call to test, by returning a modified copy of itself for the next
+	// call. When findBlockingSet or findQuorum needs to backtrack, they
+	// also unwind to earlier versions of the predicate.
+	next() predicate
+}
+
+// This is a simple function predicate. It does not change from one
+// call to the next.
+type fpred func(*Env) bool
+
+func (f fpred) test(env *Env) bool {
+	return f(env)
+}
+
+func (f fpred) next() predicate {
+	return f
 }
 
 // minMaxPred is a predicate that can narrow a set of min/max bounds

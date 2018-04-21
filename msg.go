@@ -2,6 +2,8 @@ package scp
 
 import "fmt"
 
+// Msg is the abstract type of the payload of an SCP message (conveyed
+// in an envelope, see type Env).
 type Msg interface {
 	BN() int // returns ballot.counter in PREPARE and COMMIT messages
 	Less(Msg) bool
@@ -32,6 +34,7 @@ func (nm *NomMsg) String() string {
 	return fmt.Sprintf("NOM X=%s, Y=%s", nm.X, nm.Y)
 }
 
+// PrepMsg is the payload of a PREPARE message in the ballot protocol.
 type PrepMsg struct {
 	B, P, PP Ballot
 	HN, CN   int
@@ -71,6 +74,8 @@ func (pm *PrepMsg) String() string {
 	return fmt.Sprintf("PREP B=%s P=%s PP=%s CN=%d HN=%d", pm.B, pm.P, pm.PP, pm.CN, pm.HN)
 }
 
+// CommitMsg is the payload of a COMMIT message in the ballot
+// protocol.
 type CommitMsg struct {
 	B          Ballot
 	PN, HN, CN int
@@ -106,6 +111,8 @@ func (cm *CommitMsg) String() string {
 	return fmt.Sprintf("COMMIT B=%s PN=%d CN=%d HN=%d", cm.B, cm.PN, cm.CN, cm.HN)
 }
 
+// ExtMsg is the payload of an EXTERNALIZE message in the ballot
+// protocol.
 type ExtMsg struct {
 	C  Ballot
 	HN int
