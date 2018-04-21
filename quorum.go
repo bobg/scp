@@ -123,3 +123,41 @@ func (s *Slot) findSliceQuorum(slice []NodeID, pred predicate, m map[NodeID]stru
 	// s.V.Logf("** findSliceQuorum: success")
 	return m2, pred
 }
+
+// minMaxPred is a predicate that can narrow a set of min/max bounds
+// as it traverses nodes.
+type minMaxPred struct {
+	min, max           int
+	nextMin, nextMax   int
+	finalMin, finalMax *int
+	testfn             func(env *Env, min, max int) (bool, int, int)
+}
+
+func (p *minMaxPred) test(env *Env) bool {
+	p.nextMin, p.nextMax = p.min, p.max
+	if p.min > p.max {
+		return false
+	}
+	res, min, max := p.testfn(env, p.min, p.max)
+	if !res {
+		return false
+	}
+	p.nextMin, p.nextMax = min, max
+	return true
+}
+
+func (p *minMaxPred) next() predicate {
+	if p.finalMin != nil {
+		*p.finalMin = p.nextMin
+	}
+	if p.finalMax != nil {
+		*p.finalMax = p.nextMax
+	}
+	return &minMaxPred{
+		min:      p.nextMin,
+		max:      p.nextMax,
+		finalMin: p.finalMin,
+		finalMax: p.finalMax,
+		testfn:   p.testfn,
+	}
+}

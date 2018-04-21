@@ -348,20 +348,7 @@ func (s *Slot) updateXYZ() {
 	var promote ValueSet
 	for _, val := range s.X {
 		nodeIDs := s.findBlockingSetOrQuorum(fpred(func(env *Env) bool {
-			switch msg := env.M.(type) {
-			case *NomMsg:
-				return msg.X.Contains(val) || msg.Y.Contains(val)
-
-			case *PrepMsg:
-				return VEqual(msg.B.X, val) || VEqual(msg.P.X, val) || VEqual(msg.PP.X, val)
-
-			case *CommitMsg:
-				return VEqual(msg.B.X, val)
-
-			case *ExtMsg:
-				return VEqual(msg.C.X, val)
-			}
-			return false // not reached
+			return env.votesOrAcceptsNominated(val)
 		}))
 		if len(nodeIDs) > 0 {
 			promote.Add(val)
@@ -377,20 +364,7 @@ func (s *Slot) updateXYZ() {
 	// phase.
 	for _, val := range s.Y {
 		nodeIDs := s.findQuorum(fpred(func(env *Env) bool {
-			switch msg := env.M.(type) {
-			case *NomMsg:
-				return s.Y.Contains(val)
-
-			case *PrepMsg:
-				return VEqual(msg.B.X, val) || VEqual(msg.P.X, val) || VEqual(msg.PP.X, val)
-
-			case *CommitMsg:
-				return VEqual(msg.B.X, val)
-
-			case *ExtMsg:
-				return VEqual(msg.C.X, val)
-			}
-			return false // not reached
+			return env.acceptsNominated(val)
 		}))
 		if len(nodeIDs) > 0 {
 			s.Z.Add(val)
@@ -398,42 +372,6 @@ func (s *Slot) updateXYZ() {
 		} else {
 			// s.V.Logf("* could not confirm %s", val)
 		}
-	}
-}
-
-type minMaxPred struct {
-	min, max           int
-	nextMin, nextMax   int
-	finalMin, finalMax *int
-	testfn             func(env *Env, min, max int) (bool, int, int)
-}
-
-func (p *minMaxPred) test(env *Env) bool {
-	p.nextMin, p.nextMax = p.min, p.max
-	if p.min > p.max {
-		return false
-	}
-	res, min, max := p.testfn(env, p.min, p.max)
-	if !res {
-		return false
-	}
-	p.nextMin, p.nextMax = min, max
-	return true
-}
-
-func (p *minMaxPred) next() predicate {
-	if p.finalMin != nil {
-		*p.finalMin = p.nextMin
-	}
-	if p.finalMax != nil {
-		*p.finalMax = p.nextMax
-	}
-	return &minMaxPred{
-		min:      p.nextMin,
-		max:      p.nextMax,
-		finalMin: p.finalMin,
-		finalMax: p.finalMax,
-		testfn:   p.testfn,
 	}
 }
 
