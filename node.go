@@ -55,6 +55,7 @@ func (n *Node) Handle(env *Env) (*Env, error) {
 	var isNew bool
 	s, ok := n.Pending[env.I]
 	if !ok {
+		// n.Logf("* creating new slot %d", env.I)
 		s = newSlot(env.I, n)
 		isNew = true
 		n.Pending[env.I] = s
@@ -78,6 +79,7 @@ func (n *Node) Handle(env *Env) (*Env, error) {
 		// Handling the inbound message resulted in externalizing a value.
 		// We can now save the EXTERNALIZE message and get rid of the Slot
 		// object.
+		// n.Logf("* saving ext msg %s for slot %d", extMsg, env.I)
 		n.Ext[env.I] = extMsg
 		delete(n.Pending, env.I)
 	}
@@ -92,7 +94,7 @@ func (n *Node) G(i SlotID, m []byte) (result [32]byte, err error) {
 
 	var prevValBytes []byte
 	if i > 1 {
-		msg, ok := n.Ext[i]
+		msg, ok := n.Ext[i-1]
 		if !ok {
 			return result, ErrNoPrev
 		}

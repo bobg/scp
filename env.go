@@ -2,7 +2,6 @@ package scp
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"sync/atomic"
 )
@@ -33,7 +32,7 @@ func NewEnv(v NodeID, i SlotID, q [][]NodeID, m Msg) *Env {
 // given ballot.
 func (e *Env) votesOrAcceptsPrepared(b Ballot) (result bool) {
 	defer func() { // xxx
-		log.Printf("** votesOrAcceptsPrepared(%s, %s): %v", e, b, result)
+		// log.Printf("** votesOrAcceptsPrepared(%s, %s): %v", e, b, result)
 	}()
 
 	switch msg := e.M.(type) {
@@ -62,7 +61,7 @@ func (e *Env) votesOrAcceptsPrepared(b Ballot) (result bool) {
 // Tells whether this message accepts as prepared the given ballot.
 func (e *Env) acceptsPrepared(b Ballot) (result bool) {
 	defer func() { // xxx
-		log.Printf("** acceptsPrepared(%s, %s): %v", e, b, result)
+		// log.Printf("** acceptsPrepared(%s, %s): %v", e, b, result)
 	}()
 
 	switch msg := e.M.(type) {
