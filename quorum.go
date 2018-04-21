@@ -66,6 +66,7 @@ func (s *Slot) findBlockingSetHelper(slices [][]NodeID, ids []NodeID, pred inter
 // node satisfies the given predicate.
 func (s *Slot) findQuorum(pred interface{}) []NodeID {
 	m := make(map[NodeID]struct{})
+	m[s.V.ID] = struct{}{}
 	m, _ = s.findNodeQuorum(s.V.ID, s.V.Q, pred, m)
 	if len(m) == 0 {
 		return nil
@@ -82,11 +83,14 @@ func (s *Slot) findQuorum(pred interface{}) []NodeID {
 // closure over them) all satisfy the given predicate.
 func (s *Slot) findNodeQuorum(nodeID NodeID, q [][]NodeID, pred interface{}, m map[NodeID]struct{}) (map[NodeID]struct{}, interface{}) {
 	for _, slice := range q {
+		// s.V.Logf("** findNodeQuorum(%s), slice %s", nodeID, slice)
 		m2, nextPred := s.findSliceQuorum(slice, pred, m)
 		if len(m2) > 0 {
+			// s.V.Logf("** findNodeQuorum(%s), slice %s: success", nodeID, slice)
 			return m2, nextPred
 		}
 	}
+	// s.V.Logf("** findNodeQuorum(%s): failure", nodeID)
 	return nil, pred
 }
 
@@ -101,11 +105,14 @@ func (s *Slot) findSliceQuorum(slice []NodeID, pred interface{}, m map[NodeID]st
 		}
 	}
 	if len(newNodeIDs) == 0 {
+		// s.V.Logf("** findSliceQuorum: no new nodes, success")
 		return m, pred
 	}
+	// s.V.Logf("** findSliceQuorum: new nodes %s", newNodeIDs)
 	origPred := pred
 	for _, nodeID := range newNodeIDs {
 		if env, ok := s.M[nodeID]; !ok || !doTest(env, pred) {
+			// s.V.Logf("** findSliceQuorum: failed on %s", nodeID)
 			return nil, origPred
 		}
 		pred = getNext(pred)
@@ -118,14 +125,14 @@ func (s *Slot) findSliceQuorum(slice []NodeID, pred interface{}, m map[NodeID]st
 		m2[nodeID] = struct{}{}
 	}
 	for _, nodeID := range newNodeIDs {
-		env, ok := s.M[nodeID]
-		if !ok {
-			return nil, origPred
-		}
+		// s.V.Logf("** findSliceQuorum: transitive call to findNodeQuorum")
+		env := s.M[nodeID]
 		m2, pred = s.findNodeQuorum(nodeID, env.Q, pred, m2)
 		if len(m2) == 0 {
+			// s.V.Logf("** findSliceQuorum: transitive call to findNodeQuorum failed")
 			return nil, origPred
 		}
 	}
+	// s.V.Logf("** findSliceQuorum: success")
 	return m2, pred
 }

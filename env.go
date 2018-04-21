@@ -2,6 +2,7 @@ package scp
 
 import (
 	"fmt"
+	"log"
 	"math"
 )
 
@@ -15,7 +16,11 @@ type Env struct {
 
 // Tells whether this message votes for or accepts as prepared the
 // given ballot.
-func (e *Env) votesOrAcceptsPrepared(b Ballot) bool {
+func (e *Env) votesOrAcceptsPrepared(b Ballot) (result bool) {
+	defer func() { // xxx
+		log.Printf("** votesOrAcceptsPrepared(%s, %s): %v", e, b, result)
+	}()
+
 	switch msg := e.M.(type) {
 	case *PrepMsg:
 		if b.Equal(msg.B) || b.Equal(msg.P) || b.Equal(msg.PP) {
@@ -40,7 +45,11 @@ func (e *Env) votesOrAcceptsPrepared(b Ballot) bool {
 }
 
 // Tells whether this message accepts as prepared the given ballot.
-func (e *Env) acceptsPrepared(b Ballot) bool {
+func (e *Env) acceptsPrepared(b Ballot) (result bool) {
+	defer func() { // xxx
+		log.Printf("** acceptsPrepared(%s, %s): %v", e, b, result)
+	}()
+
 	switch msg := e.M.(type) {
 	case *PrepMsg:
 		if b.Equal(msg.P) || b.Equal(msg.PP) {

@@ -57,17 +57,25 @@ func (n *Node) Handle(env *Env) (*Env, error) {
 		}, nil
 	}
 
+	var isNew bool
 	s, ok := n.Pending[env.I]
 	if !ok {
 		s = newSlot(env.I, n)
+		isNew = true
 		n.Pending[env.I] = s
 	}
 
 	outbound, err := s.Handle(env)
 	if err != nil {
+		delete(n.Pending, env.I) // xxx ?
 		return nil, err
 	}
 	if outbound == nil {
+		if isNew {
+			// This was an attempt to start a new nomination round, and it
+			// failed. Discard the new slot.
+			delete(n.Pending, env.I)
+		}
 		return nil, nil
 	}
 

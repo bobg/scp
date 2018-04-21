@@ -57,7 +57,7 @@ func main() {
 
 	entries := make(map[scp.NodeID]entry)
 
-	ch := make(chan *scp.Env, 5)
+	ch := make(chan *scp.Env, 1000)
 	var highestSlot int32
 	for _, arg := range flag.Args() {
 		parts := strings.SplitN(arg, ":", 2)

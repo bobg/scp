@@ -131,11 +131,15 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 				if s.CP.Contains(ap) {
 					continue
 				}
+				s.V.Logf("** trying to confirm prepared %s", ap)
 				nodeIDs := s.findQuorum(func(env *Env) bool {
 					return env.acceptsPrepared(ap)
 				})
 				if len(nodeIDs) > 0 {
+					s.V.Logf("** confirmed prepared %s", ap)
 					cps = append(cps, ap)
+				} else {
+					s.V.Logf("** not confirmed prepared %s", ap)
 				}
 			}
 			for _, cp := range cps {
@@ -362,6 +366,7 @@ func (s *Slot) updateXYZ() {
 		}
 	}
 	for _, val := range promote {
+		s.V.Logf("* promoting %s from X to Y", val)
 		s.X.Remove(val)
 		s.Y.Add(val)
 	}
@@ -387,6 +392,9 @@ func (s *Slot) updateXYZ() {
 		})
 		if len(nodeIDs) > 0 {
 			s.Z.Add(val)
+			s.V.Logf("* confirmed %s", val)
+		} else {
+			s.V.Logf("* could not confirm %s", val)
 		}
 	}
 }

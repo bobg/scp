@@ -29,7 +29,7 @@ func (nm *NomMsg) Less(other Msg) bool {
 }
 
 func (nm *NomMsg) String() string {
-	return fmt.Sprintf("nom X=%s, Y=%s", nm.X, nm.Y)
+	return fmt.Sprintf("NOM X=%s, Y=%s", nm.X, nm.Y)
 }
 
 type PrepMsg struct {
@@ -68,7 +68,7 @@ func (pm *PrepMsg) Less(other Msg) bool {
 }
 
 func (pm *PrepMsg) String() string {
-	return fmt.Sprintf("prep B=%s P=%s PP=%s CN=%d HN=%d", pm.B, pm.P, pm.PP, pm.CN, pm.HN)
+	return fmt.Sprintf("PREP B=%s P=%s PP=%s CN=%d HN=%d", pm.B, pm.P, pm.PP, pm.CN, pm.HN)
 }
 
 type CommitMsg struct {
@@ -103,7 +103,7 @@ func (cm *CommitMsg) Less(other Msg) bool {
 }
 
 func (cm *CommitMsg) String() string {
-	return fmt.Sprintf("commit B=%s PN=%d CN=%d HN=%d", cm.B, cm.PN, cm.CN, cm.HN)
+	return fmt.Sprintf("COMMIT B=%s PN=%d CN=%d HN=%d", cm.B, cm.PN, cm.CN, cm.HN)
 }
 
 type ExtMsg struct {
@@ -121,5 +121,5 @@ func (em *ExtMsg) Less(other Msg) bool {
 }
 
 func (em *ExtMsg) String() string {
-	return fmt.Sprintf("ext C=%s HN=%d", em.C, em.HN)
+	return fmt.Sprintf("EXT C=%s HN=%d", em.C, em.HN)
 }

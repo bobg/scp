@@ -15,6 +15,12 @@ type Value interface {
 }
 
 func VEqual(a, b Value) bool {
+	if a == nil {
+		return b == nil
+	}
+	if b == nil {
+		return false
+	}
 	return !a.Less(b) && !b.Less(a)
 }
 
