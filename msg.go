@@ -20,7 +20,7 @@ func (nm *NomMsg) BN() int { return 0 }
 func (nm *NomMsg) Less(other Msg) bool {
 	o, ok := other.(*NomMsg)
 	if !ok {
-		return true
+		return true // NOMINATE messages are less than all other messages
 	}
 	return len(nm.X)+len(nm.Y) < len(o.X)+len(o.Y)
 }

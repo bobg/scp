@@ -137,7 +137,7 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 			// max priority among its neighbors (for this slot) it will
 			// propagate the nomination.
 			var vs scp.ValueSet
-			vs.Add(val)
+			vs = vs.Add(val)
 			env := scp.NewEnv(n.ID, scp.SlotID(slotID), n.Q, &scp.NomMsg{X: vs})
 			n.Logf("trying to get something started with %s", env)
 			res, err := n.Handle(env)

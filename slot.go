@@ -104,20 +104,20 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 		// "Echo" nominated values by adding them to s.X.
 		switch msg := env.M.(type) {
 		case *NomMsg:
-			s.X.AddSet(msg.X)
-			s.X.AddSet(msg.Y)
+			s.X = s.X.AddSet(msg.X)
+			s.X = s.X.AddSet(msg.Y)
 		case *PrepMsg:
-			s.X.Add(msg.B.X)
+			s.X = s.X.Add(msg.B.X)
 			if !msg.P.IsZero() {
-				s.X.Add(msg.P.X)
+				s.X = s.X.Add(msg.P.X)
 			}
 			if !msg.PP.IsZero() {
-				s.X.Add(msg.PP.X)
+				s.X = s.X.Add(msg.PP.X)
 			}
 		case *CommitMsg:
-			s.X.Add(msg.B.X)
+			s.X = s.X.Add(msg.B.X)
 		case *ExtMsg:
-			s.X.Add(msg.C.X)
+			s.X = s.X.Add(msg.C.X)
 		}
 
 		// Promote accepted-nominated values from X to Y, and
@@ -137,8 +137,8 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 				if ok, err := s.maxPrioritySender(env.V); err != nil || !ok {
 					return nil, err
 				}
-				s.X.AddSet(msg.X)
-				s.X.AddSet(msg.Y)
+				s.X = s.X.AddSet(msg.X)
+				s.X = s.X.AddSet(msg.Y)
 				s.updateYZ()
 				s.B.X = s.Z.Combine()
 			}
@@ -177,8 +177,8 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 				}
 			}
 			for _, cp := range cps {
-				s.AP.Remove(cp)
-				s.CP.Add(cp)
+				s.AP = s.AP.Remove(cp)
+				s.CP = s.CP.Add(cp)
 			}
 
 			// Update s.H, the highest confirmed-prepared ballot.
@@ -392,13 +392,13 @@ func (s *Slot) updateYZ() {
 			return env.votesOrAcceptsNominated(val)
 		}))
 		if len(nodeIDs) > 0 {
-			promote.Add(val)
+			promote = promote.Add(val)
 		}
 	}
 	for _, val := range promote {
 		// s.V.Logf("* promoting %s from X to Y", val)
-		s.X.Remove(val)
-		s.Y.Add(val)
+		s.X = s.X.Remove(val)
+		s.Y = s.Y.Add(val)
 	}
 
 	// Look for values in s.Y to confirm, moving slot to the PREPARE
@@ -408,7 +408,7 @@ func (s *Slot) updateYZ() {
 			return env.acceptsNominated(val)
 		}))
 		if len(nodeIDs) > 0 {
-			s.Z.Add(val)
+			s.Z = s.Z.Add(val)
 			// s.V.Logf("* confirmed %s", val)
 		} else {
 			// s.V.Logf("* could not confirm %s", val)
@@ -423,7 +423,7 @@ func (s *Slot) updateAP() {
 			return env.votesOrAcceptsPrepared(s.B)
 		}))
 		if len(nodeIDs) > 0 {
-			s.AP.Add(s.B)
+			s.AP = s.AP.Add(s.B)
 		}
 	}
 }

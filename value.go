@@ -34,60 +34,72 @@ func VString(v Value) string {
 // ValueSet is a set of values, implemented as a sorted slice.
 type ValueSet []Value
 
-// Add adds a Value to a ValueSet.
-// TODO: this can be done in better than O(n log n).
-func (vs *ValueSet) Add(v Value) {
-	if vs.Contains(v) {
-		return
-	}
-	*vs = append(*vs, v)
-	sort.Slice(*vs, func(i, j int) bool {
-		return (*vs)[i].Less((*vs)[j])
+func (vs ValueSet) find(v Value) int {
+	return sort.Search(len(vs), func(n int) bool {
+		return !vs[n].Less(v)
 	})
 }
 
-// AddSet adds the members of one ValueSet to another.
-// TODO: this can be done _much_ better.
-func (vs *ValueSet) AddSet(other ValueSet) {
-	for _, v := range other {
-		vs.Add(v)
+// Add adds a Value to a ValueSet.
+func (vs ValueSet) Add(v Value) ValueSet {
+	index := vs.find(v)
+	if index < len(vs) && VEqual(v, vs[index]) {
+		return vs
 	}
+	var result ValueSet
+	result = append(result, vs[:index]...)
+	result = append(result, v)
+	result = append(result, vs[index:]...)
+	return result
+}
+
+// AddSet adds the members of one ValueSet to another.
+func (vs ValueSet) AddSet(other ValueSet) ValueSet {
+	if len(vs) == 0 {
+		return other
+	}
+	if len(other) == 0 {
+		return vs
+	}
+	var (
+		i, j   int
+		result ValueSet
+	)
+	for i < len(vs) && j < len(other) {
+		switch {
+		case vs[i].Less(other[j]):
+			result = append(result, vs[i])
+			i++
+		case other[j].Less(vs[i]):
+			result = append(result, other[j])
+			j++
+		default:
+			result = append(result, vs[i])
+			i++
+			j++
+		}
+	}
+	result = append(result, vs[i:]...)
+	result = append(result, other[j:]...)
+	return result
 }
 
 // Remove removes a value from a set.
-// TODO: it's almost like I don't have a CS degree or something.
-func (vs *ValueSet) Remove(v Value) {
-	for i, elt := range *vs {
-		if elt.Less(v) {
-			continue
-		}
-		if v.Less(elt) {
-			return
-		}
-		before := (*vs)[:i]
-		after := (*vs)[i+1:]
-		*vs = append([]Value{}, before...)
-		*vs = append(*vs, after...)
-		return
+func (vs ValueSet) Remove(v Value) ValueSet {
+	index := vs.find(v)
+	if index >= len(vs) || !VEqual(v, vs[index]) {
+		return vs
 	}
+	var result ValueSet
+	result = append(result, vs[:index]...)
+	result = append(result, vs[index+1:]...)
+	return result
 }
 
-// Contains uses binary search to test whether vs contains v.
+// Contains tests whether vs contains v.
 func (vs ValueSet) Contains(v Value) bool {
-	if len(vs) == 0 {
-		return false
-	}
-	mid := len(vs) / 2
-	if vs[mid].Less(v) {
-		return vs[mid+1:].Contains(v)
-	}
-	if v.Less(vs[mid]) {
-		if mid == 0 {
-			return false
-		}
-		return vs[:mid-1].Contains(v)
-	}
-	return true
+	index := vs.find(v)
+	return index < len(vs) && VEqual(vs[index], v)
 }
 
 // Combine reduces the members of vs to a single value using

@@ -55,48 +55,38 @@ func (b Ballot) String() string {
 }
 
 // BallotSet is a set of ballots, implemented as a sorted slice.
-// TODO: merge with ValueSet
 type BallotSet []Ballot
 
-func (bs *BallotSet) Add(b Ballot) {
-	if bs.Contains(b) {
-		return
-	}
-	*bs = append(*bs, b)
-	sort.Slice(*bs, func(i, j int) bool {
-		return (*bs)[i].Less((*bs)[j])
+func (bs BallotSet) find(b Ballot) int {
+	return sort.Search(len(bs), func(n int) bool {
+		return !bs[n].Less(b)
 	})
 }
 
-func (bs *BallotSet) Remove(b Ballot) {
-	for i, elt := range *bs {
-		if elt.Less(b) {
-			continue
-		}
-		if b.Less(elt) {
-			return
-		}
-		before := (*bs)[:i]
-		after := (*bs)[i+1:]
-		*bs = append([]Ballot{}, before...)
-		*bs = append(*bs, after...)
-		return
+func (bs BallotSet) Add(b Ballot) BallotSet {
+	index := bs.find(b)
+	if index < len(bs) && b.Equal(bs[index]) {
+		return bs
 	}
+	var result BallotSet
+	result = append(result, bs[:index]...)
+	result = append(result, b)
+	result = append(result, bs[index:]...)
+	return result
+}
+
+func (bs BallotSet) Remove(b Ballot) BallotSet {
+	index := bs.find(b)
+	if index >= len(bs) || !b.Equal(bs[index]) {
+		return bs
+	}
+	var result BallotSet
+	result = append(result, bs[:index]...)
+	result = append(result, bs[index+1:]...)
+	return result
 }
 
 func (bs BallotSet) Contains(b Ballot) bool {
-	if len(bs) == 0 {
-		return false
-	}
-	mid := len(bs) / 2
-	if bs[mid].Less(b) {
-		return bs[mid+1:].Contains(b)
-	}
-	if b.Less(bs[mid]) {
-		if mid == 0 {
-			return false
-		}
-		return bs[:mid-1].Contains(b)
-	}
-	return true
+	index := bs.find(b)
+	return index < len(bs) && b.Equal(bs[index])
 }
