@@ -6,27 +6,31 @@ import (
 	"time"
 )
 
+// SlotID is the type of a slot ID.
 type SlotID int
 
+// Slot maintains the state of a node's slot while it is undergoing
+// nomination and balloting.
 type Slot struct {
 	ID SlotID
-	Ph Phase
 	V  *Node
-	T  time.Time       // time at which this slot was created
+	Ph Phase           // PhNom -> PhPrep -> PhCommit -> PhExt
 	M  map[NodeID]*Env // latest message from each peer
 
-	X ValueSet // votes for nominate(val)
-	Y ValueSet // votes for accept(nominate(val))
-	Z ValueSet // confirmed nominated values
+	T time.Time // time at which this slot was created (for computing the nomination round)
+	X ValueSet  // votes for nominate(val)
+	Y ValueSet  // votes for accept(nominate(val))
+	Z ValueSet  // confirmed nominated values
 
 	B      Ballot
-	P, PP  Ballot
-	C, H   Ballot
+	P, PP  Ballot    // two highest "prepared" ballots with differing values
+	C, H   Ballot    // lowest and highest confirmed-prepared or accepted-commit ballots (depending on phase)
 	AP, CP BallotSet // accepted-prepared, confirmed-prepared; kept sorted
 
-	Upd *time.Timer
+	Upd *time.Timer // timer for invoking a deferred update
 }
 
+// Phase is the type of a slot's phase.
 type Phase int
 
 const (

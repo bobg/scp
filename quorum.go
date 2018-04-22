@@ -22,7 +22,7 @@ package scp
 // A "blocking set" is related to the idea of a quorum, but is
 // simpler. It's any set of peers among a node's quorum slices that
 // blocks the possibility of a quorum. A blocking set satisfying
-// statement X precludes the possibility of a quorum satisfying !X.  A
+// statement X precludes the existence of any quorum satisfying !X.  A
 // single peer from each of a node's quorum slices is sufficient to
 // form a blocking set.
 
@@ -36,27 +36,25 @@ func (s *Slot) findBlockingSetOrQuorum(pred predicate) []NodeID {
 
 // Checks that at least one node in each quorum slice satisfies pred.
 func (s *Slot) findBlockingSet(pred predicate) []NodeID {
-	return s.findBlockingSetHelper(s.V.Q, nil, pred)
-}
-
-func (s *Slot) findBlockingSetHelper(slices [][]NodeID, ids []NodeID, pred predicate) []NodeID {
-	if len(slices) == 0 {
-		return ids
-	}
-	for _, nodeID := range slices[0] {
-		if env, ok := s.M[nodeID]; ok && pred.test(env) {
-			nextPred := pred.next()
-			res := s.findBlockingSetHelper(slices[1:], append(ids, nodeID), nextPred)
-			if len(res) > 0 {
-				return res
+	var result []NodeID
+	for _, slice := range s.V.Q {
+		var found bool
+		for _, nodeID := range slice {
+			if env, ok := s.M[nodeID]; ok && pred.test(env) {
+				found = true
+				result = append(result, nodeID)
+				pred = pred.next()
+				break
 			}
 		}
+		if !found {
+			return nil
+		}
 	}
-	return nil
+	return result
 }
 
-// findQuorum finds a quorum containing the slot's node in which every
-// node satisfies the given predicate.
+// Finds a quorum in which every node satisfies the given predicate.
 func (s *Slot) findQuorum(pred predicate) []NodeID {
 	m := make(map[NodeID]struct{})
 	m[s.V.ID] = struct{}{}
@@ -71,9 +69,19 @@ func (s *Slot) findQuorum(pred predicate) []NodeID {
 	return result
 }
 
-// findNodeQuorum is a helper function for findQuorum. It checks that
-// the node has at least one slice whose members (and the transitive
-// closure over them) all satisfy the given predicate.
+// Helper function for findQuorum. It checks that the given node
+// (whose set of quorum slices is also given) has at least one slice
+// whose members (and the transitive closure over them) all satisfy
+// the given predicate.
+//
+// Relies on recursion (specifically, mutual recursion with
+// findSliceQuorum, below) to allow backtracking. In particular, m and
+// pred evolve as passing nodes are visited but must be able to revert
+// to earlier values when unwinding the stack. M is the set of nodes
+// visited, pred is the latest iteration of the predicate.
+//
+// Returns the new m and pred on success, nil and the original pred on
+// failure.
 func (s *Slot) findNodeQuorum(nodeID NodeID, q [][]NodeID, pred predicate, m map[NodeID]struct{}) (map[NodeID]struct{}, predicate) {
 	for _, slice := range q {
 		// s.V.Logf("** findNodeQuorum(%s), slice %s", nodeID, slice)
@@ -87,11 +95,17 @@ func (s *Slot) findNodeQuorum(nodeID NodeID, q [][]NodeID, pred predicate, m map
 	return nil, pred
 }
 
-// findSliceQuorum is a helper function for findNodeQuorum. It checks
-// whether every node in a given quorum slice (and the transitive
-// closure over them) satisfies the given predicate.
+// Helper function for findNodeQuorum. It checks whether every node in
+// a given quorum slice (and the transitive closure over them)
+// satisfies the given predicate.
+//
+// Relies on recursion (specifically, mutual recursion with
+// findNodeQuorum) to allow backtracking.
+//
+// Returns an updated m and pred on success, nil and the original pred
+// on failure.
 func (s *Slot) findSliceQuorum(slice []NodeID, pred predicate, m map[NodeID]struct{}) (map[NodeID]struct{}, predicate) {
-	var newNodeIDs []NodeID
+	var newNodeIDs []NodeID // nodes in slice not yet visited (according to m)
 	for _, nodeID := range slice {
 		if _, ok := m[nodeID]; !ok {
 			newNodeIDs = append(newNodeIDs, nodeID)
@@ -134,10 +148,10 @@ func (s *Slot) findSliceQuorum(slice []NodeID, pred predicate, m map[NodeID]stru
 type predicate interface {
 	test(*Env) bool
 
-	// next allows a predicate to update itself after each successful
-	// call to test, by returning a modified copy of itself for the next
-	// call. When findBlockingSet or findQuorum needs to backtrack, they
-	// also unwind to earlier versions of the predicate.
+	// Allows a predicate to update itself after each successful call to
+	// test, by returning a modified copy of itself for the next call to
+	// test. When findQuorum needs to backtrack, it also unwinds to
+	// earlier values of the predicate.
 	next() predicate
 }
 
@@ -153,12 +167,12 @@ func (f fpred) next() predicate {
 	return f
 }
 
-// minMaxPred is a predicate that can narrow a set of min/max bounds
-// as it traverses nodes.
+// This is a predicate that can narrow a set of min/max bounds as it
+// traverses nodes.
 type minMaxPred struct {
-	min, max           int
-	nextMin, nextMax   int
-	finalMin, finalMax *int
+	min, max           int  // the current min/max bounds
+	nextMin, nextMax   int  // min/max bounds for when the next predicate is generated
+	finalMin, finalMax *int // each call to next updates the min/max bounds these point to
 	testfn             func(env *Env, min, max int) (bool, int, int)
 }
 
