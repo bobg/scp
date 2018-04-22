@@ -107,7 +107,7 @@ const (
 func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot *int32) {
 	for {
 		// Some time in the next minNomDelayMS to maxNomDelayMS
-		// milliseconds, nominate a value for a new slot.
+		// milliseconds.
 		timer := time.NewTimer(time.Duration((minNomDelayMS + rand.Intn(maxNomDelayMS-minNomDelayMS)) * int(time.Millisecond)))
 
 		select {
@@ -131,7 +131,27 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 
 		case <-timer.C:
 			val := foods[rand.Intn(len(foods))]
-			slotID := 1 + atomic.LoadInt32(highestSlot)
+			slotID := scp.SlotID(atomic.LoadInt32(highestSlot))
+
+			if slot, ok := n.Pending[slotID]; ok && slot.Ph == scp.PhNom {
+				// Prod the node to try to get it out of NOMINATE phase, by
+				// resending it all the messages it's received so far. If it's
+				// a later round than the last time the node was prodded, the
+				// outcome may be different.
+				slot.Logf("prodding")
+				for _, env := range slot.M {
+					res, err := n.Handle(env)
+					if err != nil {
+						n.Logf("error prodding node with %s: %s", env, err)
+					} else if res != nil {
+						send <- res
+					}
+				}
+				continue
+			}
+
+			// Wanna be startin' something.
+			slotID++
 
 			// Send a nominate message "from" the node to itself. If it has
 			// max priority among its neighbors (for this slot) it will

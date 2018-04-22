@@ -68,29 +68,11 @@ var (
 // protocol message in response, or nil if the incoming message is
 // ignored.
 func (s *Slot) Handle(env *Env) (resp *Env, err error) {
-	defer func() {
-		if s.Ph == PhNom && resp == nil {
-			delete(s.M, env.V)
-		}
-	}()
-
-	if have, ok := s.M[env.V]; ok {
-		// We already have a message from this sender.
-
-		if _, ok := env.M.(*NomMsg); ok && s.Ph == PhNom && env.V == s.V.ID {
-			// Special case: this node is in the NOMINATE phase, the new
-			// message is another NOMINATE, and the sender is the node
-			// itself. In this case, echo the original NOMINATE message, not
-			// the new one.
-			s.Logf("* discarding new NOM msg in favor of old one: %s", have)
-			return have, nil
-		}
-		if !have.M.Less(env.M) {
-			// We already have a message from this sender that's the same or
-			// newer.
-			s.Logf("* ignoring redundant or outdated msg %s", env)
-			return nil, nil
-		}
+	if have, ok := s.M[env.V]; ok && !have.M.Less(env.M) && s.Ph != PhNom {
+		// We already have a message from this sender that's the same or
+		// newer.
+		s.Logf("* ignoring redundant or outdated msg %s", env)
+		return nil, nil
 	}
 
 	s.M[env.V] = env
