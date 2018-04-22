@@ -49,33 +49,64 @@ func newSlot(id SlotID, n *Node) *Slot {
 	}
 }
 
-const (
-	roundDuration          = 100 * time.Millisecond
-	deferredUpdateInterval = 250 * time.Millisecond
+var (
+	// NomRoundInterval determines the duration of a nomination "round."
+	// Round N lasts for a duration of (2+N)*NomRoundInterval.  A node's
+	// neighbor set, and the priorities of the peers in that set,
+	// changes from one round to the next.
+	NomRoundInterval = time.Second
+
+	// DeferredUpdateInterval determines the delay between arming a
+	// deferred-update timer and firing it. The delay is
+	// (1+N)*DeferredUpdateInterval, where N is the value of the slot's
+	// ballot counter (B.N).
+	DeferredUpdateInterval = time.Second
 )
 
-func (s *Slot) Handle(env *Env) (*Env, error) {
-	if have, ok := s.M[env.V]; ok && !have.M.Less(env.M) {
-		// We already have a message from this sender that's the same or
-		// newer.
-		return nil, nil
+// Handle embodies most of the nomination and balloting protocols. It
+// processes an incoming protocol message and returns an outbound
+// protocol message in response, or nil if the incoming message is
+// ignored.
+func (s *Slot) Handle(env *Env) (resp *Env, err error) {
+	defer func() {
+		if s.Ph == PhNom && resp == nil {
+			delete(s.M, env.V)
+		}
+	}()
+
+	if have, ok := s.M[env.V]; ok {
+		// We already have a message from this sender.
+
+		if _, ok := env.M.(*NomMsg); ok && s.Ph == PhNom && env.V == s.V.ID {
+			// Special case: this node is in the NOMINATE phase, the new
+			// message is another NOMINATE, and the sender is the node
+			// itself. In this case, echo the original NOMINATE message, not
+			// the new one.
+			s.Logf("* discarding new NOM msg in favor of old one: %s", have)
+			return have, nil
+		}
+		if !have.M.Less(env.M) {
+			// We already have a message from this sender that's the same or
+			// newer.
+			s.Logf("* ignoring redundant or outdated msg %s", env)
+			return nil, nil
+		}
 	}
 
 	s.M[env.V] = env
 
 	switch s.Ph { // note, s.Ph == PhExt should never be true
 	case PhNom:
+		if ok, err := s.maxPrioritySender(env.V); err != nil || !ok {
+			return nil, err
+		}
+
+		// "Echo" nominated values by adding them to s.X.
 		switch msg := env.M.(type) {
 		case *NomMsg:
-			// nom nom
-			err := s.handleNomMsg(env, msg)
-			if err != nil {
-				return nil, err
-			}
-
+			s.X.AddSet(msg.X)
+			s.X.AddSet(msg.Y)
 		case *PrepMsg:
-			// Prep msg in nom phase
-			// B.X, P.X, and PPrime.X are all accepted-nominated by env.V
 			s.X.Add(msg.B.X)
 			if !msg.P.IsZero() {
 				s.X.Add(msg.P.X)
@@ -83,19 +114,15 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 			if !msg.PP.IsZero() {
 				s.X.Add(msg.PP.X)
 			}
-
 		case *CommitMsg:
-			// Commit msg in nom phase
-			// B.X is accepted-nominated by env.V
 			s.X.Add(msg.B.X)
-
 		case *ExtMsg:
-			// Ext msg in nom phase
-			// C.X is accepted-nominated by env.V
 			s.X.Add(msg.C.X)
 		}
 
-		s.updateXYZ()
+		// Promote accepted-nominated values from X to Y, and
+		// confirmed-nominated values from Y to Z.
+		s.updateYZ()
 
 		if len(s.Z) > 0 {
 			s.Ph = PhPrep
@@ -104,14 +131,17 @@ func (s *Slot) Handle(env *Env) (*Env, error) {
 		}
 
 	case PhPrep:
-		if msg, ok := env.M.(*NomMsg); ok && s.H.N == 0 {
-			// Can still update s.Z and s.B.X
-			err := s.handleNomMsg(env, msg)
-			if err != nil {
-				return nil, err
+		if msg, ok := env.M.(*NomMsg); ok {
+			if s.H.N == 0 {
+				// Can still update s.Z and s.B.X
+				if ok, err := s.maxPrioritySender(env.V); err != nil || !ok {
+					return nil, err
+				}
+				s.X.AddSet(msg.X)
+				s.X.AddSet(msg.Y)
+				s.updateYZ()
+				s.B.X = s.Z.Combine()
 			}
-			s.updateXYZ()
-			s.B.X = s.Z.Combine()
 		} else {
 			s.updateAP()
 
@@ -318,35 +348,42 @@ func (s *Slot) setBX() {
 	}
 }
 
-func (s *Slot) handleNomMsg(env *Env, msg *NomMsg) error {
-	round := int(time.Since(s.T) / roundDuration)
-	neighbors, err := s.V.Neighbors(s.ID, round)
-	if err != nil {
-		return err
-	}
-
-	var (
-		maxPriority          [32]byte
-		senderHasMaxPriority bool
-	)
-	for _, neighbor := range neighbors {
-		priority, err := s.V.Priority(s.ID, round, neighbor)
+// Tells whether the given peer has or had the maximum priority in the
+// current or any earlier nomination round.
+func (s *Slot) maxPrioritySender(nodeID NodeID) (bool, error) {
+	// Nomination round N lasts for a duration of
+	// (2+N)*NomRoundInterval. Via the quadratic formula this tells us
+	// that after an elapsed time of T, it's round sqrt(1+T)-1.
+	elapsed := float64(time.Since(s.T)) / float64(NomRoundInterval)
+	thisRound := int(math.Sqrt(1.0+elapsed) - 1.0)
+	for round := thisRound; round >= 0; round-- {
+		neighbors, err := s.V.Neighbors(s.ID, round)
 		if err != nil {
-			return err
+			return false, err
 		}
-		if bytes.Compare(priority[:], maxPriority[:]) > 0 {
-			maxPriority = priority
-			senderHasMaxPriority = (neighbor == env.V)
+		var (
+			maxPriority [32]byte
+			sender      NodeID
+		)
+		for _, neighbor := range neighbors {
+			priority, err := s.V.Priority(s.ID, round, neighbor)
+			if err != nil {
+				return false, err
+			}
+			if bytes.Compare(priority[:], maxPriority[:]) > 0 {
+				maxPriority = priority
+				sender = neighbor
+			}
+		}
+		s.Logf("* round %d: max priority sender is %s", round, sender)
+		if sender == nodeID {
+			return true, nil
 		}
 	}
-	if senderHasMaxPriority {
-		s.X.AddSet(msg.X)
-		s.X.AddSet(msg.Y)
-	}
-	return nil
+	return false, nil
 }
 
-func (s *Slot) updateXYZ() {
+func (s *Slot) updateYZ() {
 	// Look for values to promote from s.X to s.Y.
 	// xxx there is surely a better way to do this
 	var promote ValueSet
@@ -402,7 +439,7 @@ func (s *Slot) updateB() {
 			return env.M.BN() > s.B.N
 		}))
 		if len(nodeIDs) > 0 {
-			s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(deferredUpdateInterval)), s.deferredUpdate)
+			s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(DeferredUpdateInterval)), s.deferredUpdate)
 		}
 	}
 
@@ -426,4 +463,10 @@ func (s *Slot) updateB() {
 		}
 		s.setBX()
 	}
+}
+
+func (s *Slot) Logf(f string, a ...interface{}) {
+	f = "slot %d: " + f
+	a = append([]interface{}{s.ID}, a...)
+	s.V.Logf(f, a...)
 }

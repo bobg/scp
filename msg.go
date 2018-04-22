@@ -18,16 +18,11 @@ type NomMsg struct {
 func (nm *NomMsg) BN() int { return 0 }
 
 func (nm *NomMsg) Less(other Msg) bool {
-	if other, ok := other.(*NomMsg); ok {
-		if len(nm.Y) < len(other.Y) {
-			return true
-		}
-		if len(other.Y) < len(nm.Y) {
-			return false
-		}
-		return len(nm.X) < len(other.X)
+	o, ok := other.(*NomMsg)
+	if !ok {
+		return true
 	}
-	return true
+	return len(nm.X)+len(nm.Y) < len(o.X)+len(o.Y)
 }
 
 func (nm *NomMsg) String() string {

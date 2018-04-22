@@ -108,14 +108,14 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 	for {
 		// Some time in the next minNomDelayMS to maxNomDelayMS
 		// milliseconds, nominate a value for a new slot.
-		timeCh := make(chan struct{})
-		timer := time.AfterFunc(time.Duration((minNomDelayMS+rand.Intn(maxNomDelayMS-minNomDelayMS))*int(time.Millisecond)), func() { close(timeCh) })
+		timer := time.NewTimer(time.Duration((minNomDelayMS + rand.Intn(maxNomDelayMS-minNomDelayMS)) * int(time.Millisecond)))
 
 		select {
 		case env := <-recv:
 			// Never mind about the nomination timer.
-			timer.Stop()
-			close(timeCh)
+			if !timer.Stop() {
+				<-timer.C
+			}
 
 			res, err := n.Handle(env)
 			if err != nil {
@@ -125,9 +125,11 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 			if res != nil {
 				n.Logf("handled %s -> %s", env, res)
 				send <- res
+			} else {
+				n.Logf("* ignored %s", env)
 			}
 
-		case <-timeCh:
+		case <-timer.C:
 			val := foods[rand.Intn(len(foods))]
 			slotID := 1 + atomic.LoadInt32(highestSlot)
 

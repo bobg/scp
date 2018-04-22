@@ -47,6 +47,7 @@ func NewNode(id NodeID, q [][]NodeID) *Node {
 // protocol message in response, or nil if the incoming message is
 // ignored. (A message is ignored if it's invalid, redundant, or older
 // than another message already received from the same sender.)
+// TODO: add validity checks
 func (n *Node) Handle(env *Env) (*Env, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -62,11 +63,9 @@ func (n *Node) Handle(env *Env) (*Env, error) {
 		return NewEnv(n.ID, env.I, n.Q, msg), nil
 	}
 
-	var isNew bool
 	s, ok := n.Pending[env.I]
 	if !ok {
 		s = newSlot(env.I, n)
-		isNew = true
 		n.Pending[env.I] = s
 	}
 
@@ -76,11 +75,6 @@ func (n *Node) Handle(env *Env) (*Env, error) {
 		return nil, err
 	}
 	if outbound == nil {
-		if isNew {
-			// This was an attempt to start a new nomination round, and it
-			// failed. Discard the new slot.
-			delete(n.Pending, env.I)
-		}
 		return nil, nil
 	}
 
