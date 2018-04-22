@@ -125,8 +125,6 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 			if res != nil {
 				n.Logf("handled %s -> %s", env, res)
 				send <- res
-			} else {
-				n.Logf("* ignored %s", env)
 			}
 
 		case <-timer.C:

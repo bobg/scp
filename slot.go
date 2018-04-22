@@ -71,7 +71,6 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 	if have, ok := s.M[env.V]; ok && !have.M.Less(env.M) && s.Ph != PhNom {
 		// We already have a message from this sender that's the same or
 		// newer.
-		s.Logf("* ignoring redundant or outdated msg %s", env)
 		return nil, nil
 	}
 
@@ -147,15 +146,11 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 				if s.CP.Contains(ap) {
 					continue
 				}
-				// s.V.Logf("** trying to confirm prepared %s", ap)
 				nodeIDs := s.findQuorum(fpred(func(env *Env) bool {
 					return env.acceptsPrepared(ap)
 				}))
 				if len(nodeIDs) > 0 {
-					// s.V.Logf("** confirmed prepared %s", ap)
 					cps = append(cps, ap)
-				} else {
-					// s.V.Logf("** not confirmed prepared %s", ap)
 				}
 			}
 			for _, cp := range cps {
@@ -357,7 +352,6 @@ func (s *Slot) maxPrioritySender(nodeID NodeID) (bool, error) {
 				sender = neighbor
 			}
 		}
-		s.Logf("* round %d: max priority sender is %s", round, sender)
 		if sender == nodeID {
 			return true, nil
 		}
@@ -378,7 +372,6 @@ func (s *Slot) updateYZ() {
 		}
 	}
 	for _, val := range promote {
-		// s.V.Logf("* promoting %s from X to Y", val)
 		s.X = s.X.Remove(val)
 		s.Y = s.Y.Add(val)
 	}
@@ -391,9 +384,6 @@ func (s *Slot) updateYZ() {
 		}))
 		if len(nodeIDs) > 0 {
 			s.Z = s.Z.Add(val)
-			// s.V.Logf("* confirmed %s", val)
-		} else {
-			// s.V.Logf("* could not confirm %s", val)
 		}
 	}
 }
