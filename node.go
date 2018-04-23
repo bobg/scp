@@ -303,11 +303,6 @@ func (ns NodeSet) Contains(nodeID NodeID) bool {
 	return index < len(ns) && nodeID == ns[index]
 }
 
-// Copy returns a copy of ns.
-func (ns NodeSet) Copy() NodeSet {
-	return NodeSet(append([]NodeID{}, ns...))
-}
-
 var maxUint256 = [32]byte{
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,

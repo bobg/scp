@@ -54,12 +54,13 @@ func (s *Slot) findBlockingSet(pred predicate) NodeSet {
 	return result
 }
 
-// Finds a quorum in which every node satisfies the given predicate.
+// Finds a quorum in which every node satisfies the given
+// predicate. The slot's node itself is presumed to satisfy the
+// predicate.
 func (s *Slot) findQuorum(pred predicate) NodeSet {
-	var m NodeSet
-	m = m.Add(s.V.ID)
-	m, _ = s.findNodeQuorum(s.V.ID, s.V.Q, pred, m)
-	return m
+	ns := NodeSet{s.V.ID}
+	ns, _ = s.findNodeQuorum(s.V.ID, s.V.Q, pred, ns)
+	return ns
 }
 
 // Helper function for findQuorum. It checks that the given node
@@ -68,18 +69,20 @@ func (s *Slot) findQuorum(pred predicate) NodeSet {
 // the given predicate.
 //
 // Relies on recursion (specifically, mutual recursion with
-// findSliceQuorum, below) to allow backtracking. In particular, m and
-// pred evolve as passing nodes are visited but must be able to revert
-// to earlier values when unwinding the stack. M is the set of nodes
-// visited, pred is the latest iteration of the predicate.
+// findSliceQuorum, below) to allow backtracking. In particular, known
+// and pred evolve as passing nodes are discovered but must be able to
+// revert to earlier values when unwinding the stack. Known is the set
+// of nodes known to be in the quorum, pred is the latest iteration of
+// the predicate. Searching is complete when encountering a slice that
+// doesn't expand the set of known nodes.
 //
-// Returns the new m and pred on success, nil and the original pred on
-// failure.
-func (s *Slot) findNodeQuorum(nodeID NodeID, q []NodeSet, pred predicate, m NodeSet) (NodeSet, predicate) {
+// Returns the quorum NodeSet and pred on success, nil and the
+// original pred on failure.
+func (s *Slot) findNodeQuorum(nodeID NodeID, q []NodeSet, pred predicate, known NodeSet) (NodeSet, predicate) {
 	for _, slice := range q {
-		m2, nextPred := s.findSliceQuorum(slice, pred, m)
-		if len(m2) > 0 {
-			return m2, nextPred
+		result, nextPred := s.findSliceQuorum(slice, pred, known)
+		if len(result) > 0 {
+			return result, nextPred
 		}
 	}
 	return nil, pred
@@ -90,14 +93,14 @@ func (s *Slot) findNodeQuorum(nodeID NodeID, q []NodeSet, pred predicate, m Node
 // satisfies the given predicate.
 //
 // Relies on recursion (specifically, mutual recursion with
-// findNodeQuorum) to allow backtracking.
+// findNodeQuorum) to allow easy backtracking.
 //
-// Returns an updated m and pred on success, nil and the original pred
-// on failure.
-func (s *Slot) findSliceQuorum(slice NodeSet, pred predicate, m NodeSet) (NodeSet, predicate) {
-	newNodeIDs := slice.Minus(m) // nodes in slice not yet visited (according to m)
+// Returns the quorum NodeSet and pred on success, nil and the
+// original pred on failure.
+func (s *Slot) findSliceQuorum(slice NodeSet, pred predicate, known NodeSet) (NodeSet, predicate) {
+	newNodeIDs := slice.Minus(known)
 	if len(newNodeIDs) == 0 {
-		return m, pred
+		return known, pred
 	}
 	origPred := pred
 	for _, nodeID := range newNodeIDs {
@@ -106,16 +109,15 @@ func (s *Slot) findSliceQuorum(slice NodeSet, pred predicate, m NodeSet) (NodeSe
 		}
 		pred = pred.next()
 	}
-	m2 := m.Copy()
-	m2 = m2.Union(newNodeIDs)
+	known = known.Union(newNodeIDs)
 	for _, nodeID := range newNodeIDs {
 		msg := s.M[nodeID]
-		m2, pred = s.findNodeQuorum(nodeID, msg.Q, pred, m2)
-		if len(m2) == 0 {
+		known, pred = s.findNodeQuorum(nodeID, msg.Q, pred, known)
+		if len(known) == 0 {
 			return nil, origPred
 		}
 	}
-	return m2, pred
+	return known, pred
 }
 
 // Abstract predicate. Concrete types below.
