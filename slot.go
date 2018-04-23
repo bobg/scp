@@ -115,13 +115,16 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 		if msg, ok := env.M.(*NomMsg); ok {
 			if s.H.N == 0 {
 				// Can still update s.Z and s.B.X
-				if ok, err := s.maxPrioritySender(env.V); err != nil || !ok {
+				ok, err := s.maxPrioritySender(env.V)
+				if err != nil {
 					return nil, err
 				}
-				s.X = s.X.AddSet(msg.X)
-				s.X = s.X.AddSet(msg.Y)
-				s.updateYZ()
-				s.B.X = s.Z.Combine()
+				if ok {
+					s.X = s.X.AddSet(msg.X)
+					s.X = s.X.AddSet(msg.Y)
+					s.updateYZ()
+					s.B.X = s.Z.Combine()
+				}
 			}
 		} else {
 			s.updateAP()
@@ -299,6 +302,8 @@ func (s *Slot) deferredUpdate() {
 	s.Upd = nil
 	s.B.N++
 	s.setBX()
+
+	s.Logf("deferred update, B is now %s", s.B)
 }
 
 func (s *Slot) cancelUpd() {

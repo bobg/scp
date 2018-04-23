@@ -71,7 +71,7 @@ func (n *Node) Handle(env *Env) (*Env, error) {
 
 	outbound, err := s.Handle(env)
 	if err != nil {
-		delete(n.Pending, env.I) // xxx ?
+		// delete(n.Pending, env.I) // xxx ?
 		return nil, err
 	}
 	if outbound == nil {

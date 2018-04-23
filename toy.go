@@ -128,28 +128,29 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 			}
 
 		case <-timer.C:
-			val := foods[rand.Intn(len(foods))]
-			slotID := scp.SlotID(atomic.LoadInt32(highestSlot))
-
-			if slot, ok := n.Pending[slotID]; ok && slot.Ph == scp.PhNom {
-				// Prod the node to try to get it out of NOMINATE phase, by
-				// resending it all the messages it's received so far. If it's
-				// a later round than the last time the node was prodded, the
-				// outcome may be different.
-				slot.Logf("prodding")
-				for _, env := range slot.M {
-					res, err := n.Handle(env)
-					if err != nil {
-						n.Logf("error prodding node with %s: %s", env, err)
-					} else if res != nil {
-						send <- res
+			// xxx should acquire n.mu
+			var prodded bool
+			for _, slot := range n.Pending {
+				if slot.Ph == scp.PhNom {
+					slot.Logf("prodding")
+					prodded = true
+					for _, env := range slot.M {
+						res, err := n.Handle(env)
+						if err != nil {
+							n.Logf("error prodding node with %s: %s", env, err)
+						} else if res != nil {
+							send <- res
+						}
 					}
 				}
+			}
+
+			if prodded {
 				continue
 			}
 
-			// Wanna be startin' something.
-			slotID++
+			slotID := 1 + scp.SlotID(atomic.LoadInt32(highestSlot))
+			val := foods[rand.Intn(len(foods))]
 
 			// Send a nominate message "from" the node to itself. If it has
 			// max priority among its neighbors (for this slot) it will
