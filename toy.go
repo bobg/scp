@@ -142,12 +142,12 @@ func nodefn(n *scp.Node, recv <-chan *scp.Msg, send chan<- *scp.Msg, highestSlot
 							send <- res
 						}
 						prodded = true
-						slot.Logf("prodded")
 					}
 				}
 			}
 
 			if prodded {
+				n.Logf("prodded")
 				continue
 			}
 
