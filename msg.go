@@ -1,127 +1,181 @@
 package scp
 
-import "fmt"
+import (
+	"fmt"
+	"sync/atomic"
+)
 
-// Msg is the abstract type of the payload of an SCP message (conveyed
-// in an envelope, see type Env).
-type Msg interface {
-	BN() int // returns ballot.counter in PREPARE and COMMIT messages
-	Less(Msg) bool
-	String() string
+// Msg is an SCP protocol message.
+type Msg struct {
+	C int32      // A counter for identifying this envelope, does not participate in the protocol.
+	V NodeID     // ID of the node sending this message.
+	I SlotID     // ID of the slot that this message is about.
+	Q [][]NodeID // Quorum slices of the sending node.
+	T Topic      // The payload: a *NomTopic, *PrepTopic, *CommitTopic, or *ExtTopic.
 }
 
-// NomMsg is the payload of a nomination protocol message.
-type NomMsg struct {
-	X, Y ValueSet
-}
+var msgCounter int32
 
-func (nm *NomMsg) BN() int { return 0 }
-
-func (nm *NomMsg) Less(other Msg) bool {
-	o, ok := other.(*NomMsg)
-	if !ok {
-		return true // NOMINATE messages are less than all other messages
+// NewMsg produces a new message.
+func NewMsg(v NodeID, i SlotID, q [][]NodeID, t Topic) *Msg {
+	c := atomic.AddInt32(&msgCounter, 1)
+	return &Msg{
+		C: c,
+		V: v,
+		I: i,
+		Q: q,
+		T: t,
 	}
-	return len(nm.X)+len(nm.Y) < len(o.X)+len(o.Y)
 }
 
-func (nm *NomMsg) String() string {
-	return fmt.Sprintf("NOM X=%s, Y=%s", nm.X, nm.Y)
-}
-
-// PrepMsg is the payload of a PREPARE message in the ballot protocol.
-type PrepMsg struct {
-	B, P, PP Ballot
-	HN, CN   int
-}
-
-func (pm *PrepMsg) BN() int { return pm.B.N }
-
-func (pm *PrepMsg) Less(other Msg) bool {
-	switch other := other.(type) {
-	case *NomMsg:
-		return false
-	case *PrepMsg:
-		if pm.B.Less(other.B) {
-			return true
-		}
-		if other.B.Less(pm.B) {
-			return false
-		}
-		if pm.P.Less(other.P) {
-			return true
-		}
-		if other.P.Less(pm.P) {
-			return false
-		}
-		if pm.PP.Less(other.PP) {
-			return true
-		}
-		if other.PP.Less(pm.PP) {
-			return false
-		}
-		return pm.HN < other.HN
+// Tells whether e votes nominate(v) or accepts nominate(v).
+func (e *Msg) votesOrAcceptsNominated(v Value) bool {
+	if e.acceptsNominated(v) {
+		return true
 	}
-	return true
+	topic, ok := e.T.(*NomTopic)
+	return ok && topic.X.Contains(v)
 }
 
-func (pm *PrepMsg) String() string {
-	return fmt.Sprintf("PREP B=%s P=%s PP=%s CN=%d HN=%d", pm.B, pm.P, pm.PP, pm.CN, pm.HN)
-}
+// Tells whether e accepts nominate(v).
+func (e *Msg) acceptsNominated(v Value) bool {
+	switch topic := e.T.(type) {
+	case *NomTopic:
+		return topic.Y.Contains(v)
 
-// CommitMsg is the payload of a COMMIT message in the ballot
-// protocol.
-type CommitMsg struct {
-	B          Ballot
-	PN, HN, CN int
-}
+	case *PrepTopic:
+		return VEqual(topic.B.X, v) || VEqual(topic.P.X, v) || VEqual(topic.PP.X, v)
 
-func (cm *CommitMsg) BN() int { return cm.B.N }
+	case *CommitTopic:
+		return VEqual(topic.B.X, v)
 
-func (cm *CommitMsg) Less(other Msg) bool {
-	switch other := other.(type) {
-	case *NomMsg:
-		return false
-	case *PrepMsg:
-		return false
-	case *CommitMsg:
-		if cm.B.Less(other.B) {
-			return true
-		}
-		if other.B.Less(cm.B) {
-			return false
-		}
-		if cm.PN < other.PN {
-			return true
-		}
-		if other.PN < cm.PN {
-			return false
-		}
-		return cm.HN < other.HN
+	case *ExtTopic:
+		return VEqual(topic.C.X, v)
 	}
-	return true
+	return false // not reached
 }
 
-func (cm *CommitMsg) String() string {
-	return fmt.Sprintf("COMMIT B=%s PN=%d CN=%d HN=%d", cm.B, cm.PN, cm.CN, cm.HN)
+// Tells whether e votes prepared(b) or accepts prepared(b).
+func (e *Msg) votesOrAcceptsPrepared(b Ballot) bool {
+	if e.acceptsPrepared(b) {
+		return true
+	}
+	topic, ok := e.T.(*PrepTopic)
+	return ok && b.Equal(topic.B)
 }
 
-// ExtMsg is the payload of an EXTERNALIZE message in the ballot
-// protocol.
-type ExtMsg struct {
-	C  Ballot
-	HN int
-}
+// Tells whether e accepts prepared(b).
+func (e *Msg) acceptsPrepared(b Ballot) bool {
+	switch topic := e.T.(type) {
+	case *PrepTopic:
+		if b.Equal(topic.P) || b.Equal(topic.PP) {
+			return true
+		}
+		if topic.HN > 0 {
+			if b.Equal(Ballot{N: topic.HN, X: topic.B.X}) {
+				return true
+			}
+			if topic.CN > 0 {
+				// include "vote commit" as "accept prepared"
+				return topic.CN <= b.N && b.N <= topic.HN && VEqual(b.X, topic.B.X)
+			}
+		}
 
-func (em *ExtMsg) BN() int { return 0 }
+	case *CommitTopic:
+		if VEqual(b.X, topic.B.X) {
+			// include "vote commit" and "accept commit" as "accept prepared"
+			return b.N >= topic.CN || b.N == topic.PN
+		}
 
-func (em *ExtMsg) Less(other Msg) bool {
-	if other, ok := other.(*ExtMsg); ok {
-		return em.HN < other.HN
+	case *ExtTopic:
+		if VEqual(b.X, topic.C.X) {
+			return b.N >= topic.C.N
+		}
 	}
 	return false
 }
 
-func (em *ExtMsg) String() string {
-	return fmt.Sprintf("EXT C=%s HN=%d", em.C, em.HN)
+// Tells whether e votes commit(b) or accepts commit(b) for any ballot
+// b whose value is v and whose counter is in the range [min,max]
+// (inclusive). If so, returns the new min/max that is the overlap
+// between the input and what e votes for or accepts.
+func (e *Msg) votesOrAcceptsCommit(v Value, min, max int) (bool, int, int) {
+	if res, newMin, newMax := e.acceptsCommit(v, min, max); res {
+		// xxx newMin/newMax might be too narrow after accounting only for
+		// "accepts" and not yet for "votes." do we care?
+		return true, newMin, newMax
+	}
+	switch topic := e.T.(type) {
+	case *PrepTopic:
+		if topic.CN == 0 || !VEqual(topic.B.X, v) {
+			return false, 0, 0
+		}
+		if topic.CN > max || topic.HN < min {
+			return false, 0, 0
+		}
+		if topic.CN > min {
+			min = topic.CN
+		}
+		if topic.HN < max {
+			max = topic.HN
+		}
+		return true, min, max
+
+	case *CommitTopic:
+		if !VEqual(topic.B.X, v) {
+			return false, 0, 0
+		}
+		if topic.CN > max {
+			return false, 0, 0
+		}
+		if topic.CN > min {
+			min = topic.CN
+		}
+		return true, min, max
+	}
+	return false, 0, 0
+}
+
+// Tells whether e accepts commit(b) for any ballot b whose value is v
+// and whose counter is in the range [min,max] (inclusive). If so,
+// returns the new min/max that is the overlap between the input and
+// what e accepts.
+func (e *Msg) acceptsCommit(v Value, min, max int) (bool, int, int) {
+	switch topic := e.T.(type) {
+	case *CommitTopic:
+		if !VEqual(topic.B.X, v) {
+			return false, 0, 0
+		}
+		if topic.CN > max {
+			return false, 0, 0
+		}
+		if topic.HN < min {
+			return false, 0, 0
+		}
+		if topic.CN > min {
+			min = topic.CN
+		}
+		if topic.HN < max {
+			max = topic.HN
+		}
+		return true, min, max
+
+	case *ExtTopic:
+		if !VEqual(topic.C.X, v) {
+			return false, 0, 0
+		}
+		if topic.C.N > max {
+			return false, 0, 0
+		}
+		if topic.C.N > min {
+			min = topic.C.N
+		}
+		return true, min, max
+	}
+	return false, 0, 0
+}
+
+// String produces a readable representation of a message.
+func (e *Msg) String() string {
+	return fmt.Sprintf("(C=%d V=%s I=%d: %s)", e.C, e.V, e.I, e.T)
 }

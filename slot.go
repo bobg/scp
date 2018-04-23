@@ -15,7 +15,7 @@ type Slot struct {
 	ID SlotID
 	V  *Node
 	Ph Phase           // PhNom -> PhPrep -> PhCommit -> PhExt
-	M  map[NodeID]*Env // latest message from each peer
+	M  map[NodeID]*Msg // latest message from each peer
 
 	T time.Time // time at which this slot was created (for computing the nomination round)
 	X ValueSet  // votes for nominate(val)
@@ -45,7 +45,7 @@ func newSlot(id SlotID, n *Node) *Slot {
 		ID: id,
 		V:  n,
 		T:  time.Now(),
-		M:  make(map[NodeID]*Env),
+		M:  make(map[NodeID]*Msg),
 	}
 }
 
@@ -67,38 +67,38 @@ var (
 // processes an incoming protocol message and returns an outbound
 // protocol message in response, or nil if the incoming message is
 // ignored.
-func (s *Slot) Handle(env *Env) (resp *Env, err error) {
-	if have, ok := s.M[env.V]; ok && !have.M.Less(env.M) && s.Ph != PhNom {
+func (s *Slot) Handle(msg *Msg) (resp *Msg, err error) {
+	if have, ok := s.M[msg.V]; ok && !have.T.Less(msg.T) && s.Ph != PhNom {
 		// We already have a message from this sender that's the same or
 		// newer.
 		return nil, nil
 	}
 
-	s.M[env.V] = env
+	s.M[msg.V] = msg
 
 	switch s.Ph { // note, s.Ph == PhExt should never be true
 	case PhNom:
-		if ok, err := s.maxPrioritySender(env.V); err != nil || !ok {
+		if ok, err := s.maxPrioritySender(msg.V); err != nil || !ok {
 			return nil, err
 		}
 
 		// "Echo" nominated values by adding them to s.X.
-		switch msg := env.M.(type) {
-		case *NomMsg:
-			s.X = s.X.AddSet(msg.X)
-			s.X = s.X.AddSet(msg.Y)
-		case *PrepMsg:
-			s.X = s.X.Add(msg.B.X)
-			if !msg.P.IsZero() {
-				s.X = s.X.Add(msg.P.X)
+		switch topic := msg.T.(type) {
+		case *NomTopic:
+			s.X = s.X.AddSet(topic.X)
+			s.X = s.X.AddSet(topic.Y)
+		case *PrepTopic:
+			s.X = s.X.Add(topic.B.X)
+			if !topic.P.IsZero() {
+				s.X = s.X.Add(topic.P.X)
 			}
-			if !msg.PP.IsZero() {
-				s.X = s.X.Add(msg.PP.X)
+			if !topic.PP.IsZero() {
+				s.X = s.X.Add(topic.PP.X)
 			}
-		case *CommitMsg:
-			s.X = s.X.Add(msg.B.X)
-		case *ExtMsg:
-			s.X = s.X.Add(msg.C.X)
+		case *CommitTopic:
+			s.X = s.X.Add(topic.B.X)
+		case *ExtTopic:
+			s.X = s.X.Add(topic.C.X)
 		}
 
 		// Promote accepted-nominated values from X to Y, and
@@ -112,16 +112,16 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 		}
 
 	case PhPrep:
-		if msg, ok := env.M.(*NomMsg); ok {
+		if topic, ok := msg.T.(*NomTopic); ok {
 			if s.H.N == 0 {
 				// Can still update s.Z and s.B.X
-				ok, err := s.maxPrioritySender(env.V)
+				ok, err := s.maxPrioritySender(msg.V)
 				if err != nil {
 					return nil, err
 				}
 				if ok {
-					s.X = s.X.AddSet(msg.X)
-					s.X = s.X.AddSet(msg.Y)
+					s.X = s.X.AddSet(topic.X)
+					s.X = s.X.AddSet(topic.Y)
 					s.updateYZ()
 					s.B.X = s.Z.Combine()
 				}
@@ -149,8 +149,8 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 				if s.CP.Contains(ap) {
 					continue
 				}
-				nodeIDs := s.findQuorum(fpred(func(env *Env) bool {
-					return env.acceptsPrepared(ap)
+				nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
+					return msg.acceptsPrepared(ap)
 				}))
 				if len(nodeIDs) > 0 {
 					cps = append(cps, ap)
@@ -195,8 +195,8 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 					max:      s.H.N,
 					finalMin: &cn,
 					finalMax: &hn,
-					testfn: func(env *Env, min, max int) (bool, int, int) {
-						return env.votesOrAcceptsCommit(s.B.X, min, max)
+					testfn: func(msg *Msg, min, max int) (bool, int, int) {
+						return msg.votesOrAcceptsCommit(s.B.X, min, max)
 					},
 				}
 				nodeIDs := s.findBlockingSetOrQuorum(pred)
@@ -222,8 +222,8 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 			max:      math.MaxInt32,
 			finalMin: &acmin,
 			finalMax: &acmax,
-			testfn: func(env *Env, min, max int) (bool, int, int) {
-				return env.votesOrAcceptsCommit(s.B.X, min, max)
+			testfn: func(msg *Msg, min, max int) (bool, int, int) {
+				return msg.votesOrAcceptsCommit(s.B.X, min, max)
 			},
 		}
 		nodeIDs := s.findBlockingSetOrQuorum(acpred)
@@ -240,8 +240,8 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 			max:      s.H.N,
 			finalMin: &cn,
 			finalMax: &hn,
-			testfn: func(env *Env, min, max int) (bool, int, int) {
-				return env.acceptsCommit(s.B.X, min, max)
+			testfn: func(msg *Msg, min, max int) (bool, int, int) {
+				return msg.acceptsCommit(s.B.X, min, max)
 			},
 		}
 		nodeIDs = s.findQuorum(ccpred)
@@ -253,19 +253,19 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 	}
 
 	// Compute a response message.
-	env = NewEnv(s.V.ID, s.ID, s.V.Q, nil)
+	msg = NewMsg(s.V.ID, s.ID, s.V.Q, nil)
 	switch s.Ph {
 	case PhNom:
 		if len(s.X) == 0 && len(s.Y) == 0 {
 			return nil, nil
 		}
-		env.M = &NomMsg{
+		msg.T = &NomTopic{
 			X: s.X,
 			Y: s.Y,
 		}
 
 	case PhPrep:
-		env.M = &PrepMsg{
+		msg.T = &PrepTopic{
 			B:  s.B,
 			P:  s.P,
 			PP: s.PP,
@@ -274,7 +274,7 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 		}
 
 	case PhCommit:
-		env.M = &CommitMsg{
+		msg.T = &CommitTopic{
 			B:  s.B,
 			PN: s.P.N,
 			HN: s.H.N,
@@ -282,13 +282,13 @@ func (s *Slot) Handle(env *Env) (resp *Env, err error) {
 		}
 
 	case PhExt:
-		env.M = &ExtMsg{
+		msg.T = &ExtTopic{
 			C:  s.C,
 			HN: s.H.N,
 		}
 	}
 
-	return env, nil
+	return msg, nil
 }
 
 func (s *Slot) deferredUpdate() {
@@ -369,8 +369,8 @@ func (s *Slot) updateYZ() {
 	// xxx there is surely a better way to do this
 	var promote ValueSet
 	for _, val := range s.X {
-		nodeIDs := s.findBlockingSetOrQuorum(fpred(func(env *Env) bool {
-			return env.votesOrAcceptsNominated(val)
+		nodeIDs := s.findBlockingSetOrQuorum(fpred(func(msg *Msg) bool {
+			return msg.votesOrAcceptsNominated(val)
 		}))
 		if len(nodeIDs) > 0 {
 			promote = promote.Add(val)
@@ -384,8 +384,8 @@ func (s *Slot) updateYZ() {
 	// Look for values in s.Y to confirm, moving slot to the PREPARE
 	// phase.
 	for _, val := range s.Y {
-		nodeIDs := s.findQuorum(fpred(func(env *Env) bool {
-			return env.acceptsNominated(val)
+		nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
+			return msg.acceptsNominated(val)
 		}))
 		if len(nodeIDs) > 0 {
 			s.Z = s.Z.Add(val)
@@ -396,8 +396,8 @@ func (s *Slot) updateYZ() {
 // Update s.AP - the set of accepted-prepared ballots.
 func (s *Slot) updateAP() {
 	if !s.AP.Contains(s.B) {
-		nodeIDs := s.findBlockingSetOrQuorum(fpred(func(env *Env) bool {
-			return env.votesOrAcceptsPrepared(s.B)
+		nodeIDs := s.findBlockingSetOrQuorum(fpred(func(msg *Msg) bool {
+			return msg.votesOrAcceptsPrepared(s.B)
 		}))
 		if len(nodeIDs) > 0 {
 			s.AP = s.AP.Add(s.B)
@@ -412,8 +412,8 @@ func (s *Slot) updateB() {
 	// node arms a timer for its local "ballot.counter + 1"
 	// seconds.
 	if s.Upd == nil { // don't bother if a timer's already armed
-		nodeIDs := s.findQuorum(fpred(func(env *Env) bool {
-			return env.M.BN() > s.B.N
+		nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
+			return msg.T.BN() > s.B.N
 		}))
 		if len(nodeIDs) > 0 {
 			s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(DeferredUpdateInterval)), s.deferredUpdate)
@@ -426,14 +426,14 @@ func (s *Slot) updateB() {
 	// "ballot.counter" to the lowest value such that this is no
 	// longer the case.  (When doing so, it also disables any
 	// pending timers associated with the old "counter".)
-	nodeIDs := s.findBlockingSet(fpred(func(env *Env) bool {
-		return env.M.BN() > s.B.N
+	nodeIDs := s.findBlockingSet(fpred(func(msg *Msg) bool {
+		return msg.T.BN() > s.B.N
 	}))
 	if len(nodeIDs) > 0 {
 		s.cancelUpd()
 		for i, nodeID := range nodeIDs {
-			env := s.M[nodeID]
-			bn := env.M.BN()
+			msg := s.M[nodeID]
+			bn := msg.T.BN()
 			if i == 0 || bn < s.B.N {
 				s.B.N = bn
 			}

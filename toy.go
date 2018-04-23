@@ -17,7 +17,7 @@ import (
 
 type entry struct {
 	node *scp.Node
-	ch   chan *scp.Env
+	ch   chan *scp.Msg
 }
 
 type valType string
@@ -57,7 +57,7 @@ func main() {
 
 	entries := make(map[scp.NodeID]entry)
 
-	ch := make(chan *scp.Env, 10000)
+	ch := make(chan *scp.Msg, 10000)
 	var highestSlot int32
 	for _, arg := range flag.Args() {
 		parts := strings.SplitN(arg, ":", 2)
@@ -75,25 +75,25 @@ func main() {
 			q = append(q, qslice)
 		}
 		node := scp.NewNode(nodeID, q)
-		nodeCh := make(chan *scp.Env, 1000)
+		nodeCh := make(chan *scp.Msg, 1000)
 		entries[nodeID] = entry{node: node, ch: nodeCh}
 		go nodefn(node, nodeCh, ch, &highestSlot)
 	}
 
 	// log.Print(spew.Sdump(entries))
 
-	for env := range ch {
-		if _, ok := env.M.(*scp.NomMsg); !ok && int32(env.I) > highestSlot { // this is the only thread that writes highestSlot, so it's ok to read it non-atomically
-			atomic.StoreInt32(&highestSlot, int32(env.I))
+	for msg := range ch {
+		if _, ok := msg.T.(*scp.NomTopic); !ok && int32(msg.I) > highestSlot { // this is the only thread that writes highestSlot, so it's ok to read it non-atomically
+			atomic.StoreInt32(&highestSlot, int32(msg.I))
 			log.Printf("highestSlot is now %d", highestSlot)
 		}
 
 		// Send this message to every other node.
 		for nodeID, entry := range entries {
-			if nodeID == env.V {
+			if nodeID == msg.V {
 				continue
 			}
-			entry.ch <- env
+			entry.ch <- msg
 		}
 	}
 }
@@ -104,26 +104,26 @@ const (
 )
 
 // runs as a goroutine
-func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot *int32) {
+func nodefn(n *scp.Node, recv <-chan *scp.Msg, send chan<- *scp.Msg, highestSlot *int32) {
 	for {
 		// Some time in the next minNomDelayMS to maxNomDelayMS
 		// milliseconds.
 		timer := time.NewTimer(time.Duration((minNomDelayMS + rand.Intn(maxNomDelayMS-minNomDelayMS)) * int(time.Millisecond)))
 
 		select {
-		case env := <-recv:
+		case msg := <-recv:
 			// Never mind about the nomination timer.
 			if !timer.Stop() {
 				<-timer.C
 			}
 
-			res, err := n.Handle(env)
+			res, err := n.Handle(msg)
 			if err != nil {
-				n.Logf("could not handle %s: %s", env, err)
+				n.Logf("could not handle %s: %s", msg, err)
 				continue
 			}
 			if res != nil {
-				n.Logf("handled %s -> %s", env, res)
+				n.Logf("handled %s -> %s", msg, res)
 				send <- res
 			}
 
@@ -134,10 +134,10 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 				if slot.Ph == scp.PhNom {
 					slot.Logf("prodding")
 					prodded = true
-					for _, env := range slot.M {
-						res, err := n.Handle(env)
+					for _, msg := range slot.M {
+						res, err := n.Handle(msg)
 						if err != nil {
-							n.Logf("error prodding node with %s: %s", env, err)
+							n.Logf("error prodding node with %s: %s", msg, err)
 						} else if res != nil {
 							send <- res
 						}
@@ -157,11 +157,11 @@ func nodefn(n *scp.Node, recv <-chan *scp.Env, send chan<- *scp.Env, highestSlot
 			// propagate the nomination.
 			var vs scp.ValueSet
 			vs = vs.Add(val)
-			env := scp.NewEnv(n.ID, scp.SlotID(slotID), n.Q, &scp.NomMsg{X: vs})
-			n.Logf("trying to get something started with %s", env)
-			res, err := n.Handle(env)
+			msg := scp.NewMsg(n.ID, scp.SlotID(slotID), n.Q, &scp.NomTopic{X: vs})
+			n.Logf("trying to get something started with %s", msg)
+			res, err := n.Handle(msg)
 			if err != nil {
-				n.Logf("could not handle %s: %s", env, err)
+				n.Logf("could not handle %s: %s", msg, err)
 				continue
 			}
 			if res != nil {

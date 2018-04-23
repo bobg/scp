@@ -28,7 +28,7 @@ type Node struct {
 
 	// Ext holds externalized values for slots that have completed
 	// balloting.
-	Ext map[SlotID]*ExtMsg
+	Ext map[SlotID]*ExtTopic
 
 	mu sync.Mutex
 }
@@ -39,7 +39,7 @@ func NewNode(id NodeID, q [][]NodeID) *Node {
 		ID:      id,
 		Q:       q,
 		Pending: make(map[SlotID]*Slot),
-		Ext:     make(map[SlotID]*ExtMsg),
+		Ext:     make(map[SlotID]*ExtTopic),
 	}
 }
 
@@ -48,42 +48,42 @@ func NewNode(id NodeID, q [][]NodeID) *Node {
 // ignored. (A message is ignored if it's invalid, redundant, or older
 // than another message already received from the same sender.)
 // TODO: add validity checks
-func (n *Node) Handle(env *Env) (*Env, error) {
+func (n *Node) Handle(msg *Msg) (*Msg, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	if msg, ok := n.Ext[env.I]; ok {
+	if topic, ok := n.Ext[msg.I]; ok {
 		// This node has already externalized a value for the given slot.
 		// Send an EXTERNALIZE message outbound, unless the inbound
 		// message is also EXTERNALIZE.
 		// TODO: ...in which case double-check that the values agree?
-		if _, ok = env.M.(*ExtMsg); ok {
+		if _, ok = msg.T.(*ExtTopic); ok {
 			return nil, nil
 		}
-		return NewEnv(n.ID, env.I, n.Q, msg), nil
+		return NewMsg(n.ID, msg.I, n.Q, topic), nil
 	}
 
-	s, ok := n.Pending[env.I]
+	s, ok := n.Pending[msg.I]
 	if !ok {
-		s = newSlot(env.I, n)
-		n.Pending[env.I] = s
+		s = newSlot(msg.I, n)
+		n.Pending[msg.I] = s
 	}
 
-	outbound, err := s.Handle(env)
+	outbound, err := s.Handle(msg)
 	if err != nil {
-		// delete(n.Pending, env.I) // xxx ?
+		// delete(n.Pending, msg.I) // xxx ?
 		return nil, err
 	}
 	if outbound == nil {
 		return nil, nil
 	}
 
-	if extMsg, ok := outbound.M.(*ExtMsg); ok {
+	if extTopic, ok := outbound.T.(*ExtTopic); ok {
 		// Handling the inbound message resulted in externalizing a value.
 		// We can now save the EXTERNALIZE message and get rid of the Slot
 		// object.
-		n.Ext[env.I] = extMsg
-		delete(n.Pending, env.I)
+		n.Ext[msg.I] = extTopic
+		delete(n.Pending, msg.I)
 	}
 
 	return outbound, nil
@@ -96,11 +96,11 @@ func (n *Node) G(i SlotID, m []byte) (result [32]byte, err error) {
 
 	var prevValBytes []byte
 	if i > 1 {
-		msg, ok := n.Ext[i-1]
+		topic, ok := n.Ext[i-1]
 		if !ok {
 			return result, ErrNoPrev
 		}
-		prevValBytes = msg.C.X.Bytes()
+		prevValBytes = topic.C.X.Bytes()
 	}
 
 	r, _ := xdr.Marshal(i)

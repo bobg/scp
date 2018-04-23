@@ -7,102 +7,102 @@ import (
 
 func TestAcceptsNominated(t *testing.T) {
 	cases := []struct {
-		m             Msg
+		m             Topic
 		v             valtype
 		wantA, wantVA bool
 	}{
 		{
-			m:      &NomMsg{},
+			m:      &NomTopic{},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &NomMsg{X: ValueSet{valtype(1)}},
+			m:      &NomTopic{X: ValueSet{valtype(1)}},
 			v:      1,
 			wantA:  false,
 			wantVA: true,
 		},
 		{
-			m:      &NomMsg{Y: ValueSet{valtype(1)}},
+			m:      &NomTopic{Y: ValueSet{valtype(1)}},
 			v:      1,
 			wantA:  true,
 			wantVA: true,
 		},
 		{
-			m:      &PrepMsg{},
+			m:      &PrepTopic{},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &PrepMsg{B: Ballot{1, valtype(1)}},
+			m:      &PrepTopic{B: Ballot{1, valtype(1)}},
 			v:      1,
 			wantA:  true,
 			wantVA: true,
 		},
 		{
-			m:      &PrepMsg{B: Ballot{1, valtype(1)}},
+			m:      &PrepTopic{B: Ballot{1, valtype(1)}},
 			v:      2,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &PrepMsg{P: Ballot{1, valtype(1)}},
+			m:      &PrepTopic{P: Ballot{1, valtype(1)}},
 			v:      1,
 			wantA:  true,
 			wantVA: true,
 		},
 		{
-			m:      &PrepMsg{P: Ballot{1, valtype(1)}},
+			m:      &PrepTopic{P: Ballot{1, valtype(1)}},
 			v:      2,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &PrepMsg{PP: Ballot{1, valtype(1)}},
+			m:      &PrepTopic{PP: Ballot{1, valtype(1)}},
 			v:      1,
 			wantA:  true,
 			wantVA: true,
 		},
 		{
-			m:      &PrepMsg{PP: Ballot{1, valtype(1)}},
+			m:      &PrepTopic{PP: Ballot{1, valtype(1)}},
 			v:      2,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &CommitMsg{},
+			m:      &CommitTopic{},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &CommitMsg{B: Ballot{1, valtype(1)}},
+			m:      &CommitTopic{B: Ballot{1, valtype(1)}},
 			v:      1,
 			wantA:  true,
 			wantVA: true,
 		},
 		{
-			m:      &CommitMsg{B: Ballot{1, valtype(1)}},
+			m:      &CommitTopic{B: Ballot{1, valtype(1)}},
 			v:      2,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &ExtMsg{},
+			m:      &ExtTopic{},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &ExtMsg{C: Ballot{1, valtype(1)}},
+			m:      &ExtTopic{C: Ballot{1, valtype(1)}},
 			v:      1,
 			wantA:  true,
 			wantVA: true,
 		},
 		{
-			m:      &ExtMsg{C: Ballot{1, valtype(1)}},
+			m:      &ExtTopic{C: Ballot{1, valtype(1)}},
 			v:      2,
 			wantA:  false,
 			wantVA: false,
@@ -110,7 +110,7 @@ func TestAcceptsNominated(t *testing.T) {
 	}
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%02d", i+1), func(t *testing.T) {
-			e := &Env{M: tc.m}
+			e := &Msg{T: tc.m}
 			got := e.acceptsNominated(tc.v)
 			if got != tc.wantA {
 				t.Errorf("got acceptsNominated=%v, want %v", got, tc.wantA)
@@ -125,168 +125,168 @@ func TestAcceptsNominated(t *testing.T) {
 
 func TestAcceptsPrepared(t *testing.T) {
 	cases := []struct {
-		m             Msg
+		m             Topic
 		v             valtype
 		wantA, wantVA bool
 	}{
 		{
-			m:      &NomMsg{},
+			m:      &NomTopic{},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &NomMsg{X: ValueSet{valtype(1)}},
+			m:      &NomTopic{X: ValueSet{valtype(1)}},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &NomMsg{Y: ValueSet{valtype(1)}},
+			m:      &NomTopic{Y: ValueSet{valtype(1)}},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &PrepMsg{},
+			m:      &PrepTopic{},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &PrepMsg{B: Ballot{5, valtype(1)}},
+			m:      &PrepTopic{B: Ballot{5, valtype(1)}},
 			v:      1,
 			wantA:  false,
 			wantVA: true,
 		},
 		{
-			m:      &PrepMsg{B: Ballot{5, valtype(2)}},
+			m:      &PrepTopic{B: Ballot{5, valtype(2)}},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &PrepMsg{P: Ballot{5, valtype(1)}},
+			m:      &PrepTopic{P: Ballot{5, valtype(1)}},
 			v:      1,
 			wantA:  true,
 			wantVA: true,
 		},
 		{
-			m:      &PrepMsg{PP: Ballot{5, valtype(1)}},
+			m:      &PrepTopic{PP: Ballot{5, valtype(1)}},
 			v:      1,
 			wantA:  true,
 			wantVA: true,
 		},
 		{
-			m:      &PrepMsg{P: Ballot{5, valtype(2)}},
+			m:      &PrepTopic{P: Ballot{5, valtype(2)}},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &PrepMsg{PP: Ballot{5, valtype(2)}},
+			m:      &PrepTopic{PP: Ballot{5, valtype(2)}},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &PrepMsg{B: Ballot{5, valtype(1)}, CN: 6, HN: 10},
+			m:      &PrepTopic{B: Ballot{5, valtype(1)}, CN: 6, HN: 10},
 			v:      1,
 			wantA:  false,
 			wantVA: true,
 		},
 		{
-			m:      &PrepMsg{B: Ballot{5, valtype(1)}, CN: 1, HN: 4},
+			m:      &PrepTopic{B: Ballot{5, valtype(1)}, CN: 1, HN: 4},
 			v:      1,
 			wantA:  false,
 			wantVA: true,
 		},
 		{
-			m:      &PrepMsg{B: Ballot{5, valtype(1)}, CN: 1, HN: 10},
+			m:      &PrepTopic{B: Ballot{5, valtype(1)}, CN: 1, HN: 10},
 			v:      1,
 			wantA:  true,
 			wantVA: true,
 		},
 		{
-			m:      &PrepMsg{B: Ballot{5, valtype(2)}, CN: 6, HN: 10},
+			m:      &PrepTopic{B: Ballot{5, valtype(2)}, CN: 6, HN: 10},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &PrepMsg{B: Ballot{5, valtype(2)}, CN: 1, HN: 4},
+			m:      &PrepTopic{B: Ballot{5, valtype(2)}, CN: 1, HN: 4},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &PrepMsg{B: Ballot{5, valtype(2)}, CN: 1, HN: 10},
+			m:      &PrepTopic{B: Ballot{5, valtype(2)}, CN: 1, HN: 10},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &CommitMsg{},
+			m:      &CommitTopic{},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &CommitMsg{B: Ballot{20, valtype(1)}, CN: 10, PN: 10},
+			m:      &CommitTopic{B: Ballot{20, valtype(1)}, CN: 10, PN: 10},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &CommitMsg{B: Ballot{20, valtype(1)}, CN: 1, PN: 10},
+			m:      &CommitTopic{B: Ballot{20, valtype(1)}, CN: 1, PN: 10},
 			v:      1,
 			wantA:  true,
 			wantVA: true,
 		},
 		{
-			m:      &CommitMsg{B: Ballot{20, valtype(2)}, CN: 1, PN: 10},
+			m:      &CommitTopic{B: Ballot{20, valtype(2)}, CN: 1, PN: 10},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &CommitMsg{B: Ballot{20, valtype(1)}, CN: 10, PN: 1},
+			m:      &CommitTopic{B: Ballot{20, valtype(1)}, CN: 10, PN: 1},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &CommitMsg{B: Ballot{20, valtype(1)}, CN: 10, PN: 5},
+			m:      &CommitTopic{B: Ballot{20, valtype(1)}, CN: 10, PN: 5},
 			v:      1,
 			wantA:  true,
 			wantVA: true,
 		},
 		{
-			m:      &CommitMsg{B: Ballot{20, valtype(2)}, CN: 10, PN: 5},
+			m:      &CommitTopic{B: Ballot{20, valtype(2)}, CN: 10, PN: 5},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &ExtMsg{},
+			m:      &ExtTopic{},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &ExtMsg{C: Ballot{1, valtype(1)}},
+			m:      &ExtTopic{C: Ballot{1, valtype(1)}},
 			v:      1,
 			wantA:  true,
 			wantVA: true,
 		},
 		{
-			m:      &ExtMsg{C: Ballot{1, valtype(2)}},
+			m:      &ExtTopic{C: Ballot{1, valtype(2)}},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
 		},
 		{
-			m:      &ExtMsg{C: Ballot{10, valtype(1)}},
+			m:      &ExtTopic{C: Ballot{10, valtype(1)}},
 			v:      1,
 			wantA:  false,
 			wantVA: false,
@@ -294,7 +294,7 @@ func TestAcceptsPrepared(t *testing.T) {
 	}
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%02d", i+1), func(t *testing.T) {
-			e := &Env{M: tc.m}
+			e := &Msg{T: tc.m}
 			b := Ballot{5, tc.v}
 			got := e.acceptsPrepared(b)
 			if got != tc.wantA {
@@ -315,13 +315,13 @@ func TestAcceptsCommit(t *testing.T) {
 	}
 
 	cases := []struct {
-		m        Msg
+		m        Topic
 		v        valtype
 		min, max int
 		a, va    want
 	}{
 		{
-			m:   &NomMsg{},
+			m:   &NomTopic{},
 			v:   1,
 			min: 1,
 			max: 10,
@@ -329,7 +329,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &NomMsg{X: ValueSet{valtype(1)}},
+			m:   &NomTopic{X: ValueSet{valtype(1)}},
 			v:   1,
 			min: 1,
 			max: 10,
@@ -337,7 +337,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &NomMsg{Y: ValueSet{valtype(1)}},
+			m:   &NomTopic{Y: ValueSet{valtype(1)}},
 			v:   1,
 			min: 1,
 			max: 10,
@@ -345,7 +345,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &PrepMsg{},
+			m:   &PrepTopic{},
 			v:   1,
 			min: 1,
 			max: 10,
@@ -353,7 +353,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &PrepMsg{B: Ballot{1, valtype(1)}},
+			m:   &PrepTopic{B: Ballot{1, valtype(1)}},
 			v:   1,
 			min: 1,
 			max: 10,
@@ -361,7 +361,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &PrepMsg{P: Ballot{1, valtype(1)}},
+			m:   &PrepTopic{P: Ballot{1, valtype(1)}},
 			v:   1,
 			min: 1,
 			max: 10,
@@ -369,7 +369,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &PrepMsg{PP: Ballot{1, valtype(1)}},
+			m:   &PrepTopic{PP: Ballot{1, valtype(1)}},
 			v:   1,
 			min: 1,
 			max: 10,
@@ -377,7 +377,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &PrepMsg{B: Ballot{1, valtype(1)}, CN: 3, HN: 7},
+			m:   &PrepTopic{B: Ballot{1, valtype(1)}, CN: 3, HN: 7},
 			v:   1,
 			min: 1,
 			max: 10,
@@ -385,7 +385,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: true, min: 3, max: 7},
 		},
 		{
-			m:   &PrepMsg{B: Ballot{1, valtype(1)}, CN: 3, HN: 7},
+			m:   &PrepTopic{B: Ballot{1, valtype(1)}, CN: 3, HN: 7},
 			v:   1,
 			min: 5,
 			max: 10,
@@ -393,7 +393,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: true, min: 5, max: 7},
 		},
 		{
-			m:   &PrepMsg{B: Ballot{1, valtype(1)}, CN: 7, HN: 20},
+			m:   &PrepTopic{B: Ballot{1, valtype(1)}, CN: 7, HN: 20},
 			v:   1,
 			min: 5,
 			max: 10,
@@ -401,7 +401,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: true, min: 7, max: 10},
 		},
 		{
-			m:   &PrepMsg{B: Ballot{1, valtype(2)}, CN: 3, HN: 7},
+			m:   &PrepTopic{B: Ballot{1, valtype(2)}, CN: 3, HN: 7},
 			v:   1,
 			min: 1,
 			max: 10,
@@ -409,7 +409,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &PrepMsg{B: Ballot{1, valtype(2)}, CN: 3, HN: 7},
+			m:   &PrepTopic{B: Ballot{1, valtype(2)}, CN: 3, HN: 7},
 			v:   1,
 			min: 5,
 			max: 10,
@@ -417,7 +417,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &PrepMsg{B: Ballot{1, valtype(2)}, CN: 7, HN: 20},
+			m:   &PrepTopic{B: Ballot{1, valtype(2)}, CN: 7, HN: 20},
 			v:   1,
 			min: 5,
 			max: 10,
@@ -425,7 +425,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &CommitMsg{B: Ballot{1, valtype(1)}, CN: 15, HN: 20},
+			m:   &CommitTopic{B: Ballot{1, valtype(1)}, CN: 15, HN: 20},
 			v:   1,
 			min: 1,
 			max: 10,
@@ -433,7 +433,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &CommitMsg{B: Ballot{1, valtype(1)}, CN: 1, HN: 4},
+			m:   &CommitTopic{B: Ballot{1, valtype(1)}, CN: 1, HN: 4},
 			v:   1,
 			min: 5,
 			max: 10,
@@ -441,7 +441,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: true, min: 5, max: 10},
 		},
 		{
-			m:   &CommitMsg{B: Ballot{1, valtype(1)}, CN: 1, HN: 7},
+			m:   &CommitTopic{B: Ballot{1, valtype(1)}, CN: 1, HN: 7},
 			v:   1,
 			min: 5,
 			max: 10,
@@ -449,7 +449,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: true, min: 5, max: 7},
 		},
 		{
-			m:   &CommitMsg{B: Ballot{1, valtype(1)}, CN: 4, HN: 12},
+			m:   &CommitTopic{B: Ballot{1, valtype(1)}, CN: 4, HN: 12},
 			v:   1,
 			min: 5,
 			max: 10,
@@ -457,7 +457,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: true, min: 5, max: 10},
 		},
 		{
-			m:   &CommitMsg{B: Ballot{1, valtype(1)}, CN: 7, HN: 12},
+			m:   &CommitTopic{B: Ballot{1, valtype(1)}, CN: 7, HN: 12},
 			v:   1,
 			min: 5,
 			max: 10,
@@ -465,7 +465,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: true, min: 7, max: 10},
 		},
 		{
-			m:   &ExtMsg{},
+			m:   &ExtTopic{},
 			v:   1,
 			min: 1,
 			max: 10,
@@ -473,7 +473,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &ExtMsg{C: Ballot{5, valtype(1)}},
+			m:   &ExtTopic{C: Ballot{5, valtype(1)}},
 			v:   1,
 			min: 1,
 			max: 10,
@@ -481,7 +481,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: true, min: 5, max: 10},
 		},
 		{
-			m:   &ExtMsg{C: Ballot{5, valtype(1)}},
+			m:   &ExtTopic{C: Ballot{5, valtype(1)}},
 			v:   1,
 			min: 1,
 			max: 4,
@@ -489,7 +489,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: false},
 		},
 		{
-			m:   &ExtMsg{C: Ballot{5, valtype(1)}},
+			m:   &ExtTopic{C: Ballot{5, valtype(1)}},
 			v:   1,
 			min: 6,
 			max: 10,
@@ -497,7 +497,7 @@ func TestAcceptsCommit(t *testing.T) {
 			va:  want{ok: true, min: 6, max: 10},
 		},
 		{
-			m:   &ExtMsg{C: Ballot{5, valtype(1)}},
+			m:   &ExtTopic{C: Ballot{5, valtype(1)}},
 			v:   1,
 			min: 3,
 			max: 7,
@@ -507,7 +507,7 @@ func TestAcceptsCommit(t *testing.T) {
 	}
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%02d", i+1), func(t *testing.T) {
-			e := &Env{M: tc.m}
+			e := &Msg{T: tc.m}
 			gotOK, gotMin, gotMax := e.acceptsCommit(tc.v, tc.min, tc.max)
 			if gotOK != tc.a.ok {
 				t.Errorf("got acceptsCommit=%v, want %v", gotOK, tc.a.ok)

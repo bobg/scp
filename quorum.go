@@ -40,7 +40,7 @@ func (s *Slot) findBlockingSet(pred predicate) []NodeID {
 	for _, slice := range s.V.Q {
 		var found bool
 		for _, nodeID := range slice {
-			if env, ok := s.M[nodeID]; ok && pred.test(env) {
+			if msg, ok := s.M[nodeID]; ok && pred.test(msg) {
 				found = true
 				result = append(result, nodeID)
 				pred = pred.next()
@@ -113,7 +113,7 @@ func (s *Slot) findSliceQuorum(slice []NodeID, pred predicate, m map[NodeID]stru
 	}
 	origPred := pred
 	for _, nodeID := range newNodeIDs {
-		if env, ok := s.M[nodeID]; !ok || !pred.test(env) {
+		if msg, ok := s.M[nodeID]; !ok || !pred.test(msg) {
 			return nil, origPred
 		}
 		pred = pred.next()
@@ -126,8 +126,8 @@ func (s *Slot) findSliceQuorum(slice []NodeID, pred predicate, m map[NodeID]stru
 		m2[nodeID] = struct{}{}
 	}
 	for _, nodeID := range newNodeIDs {
-		env := s.M[nodeID]
-		m2, pred = s.findNodeQuorum(nodeID, env.Q, pred, m2)
+		msg := s.M[nodeID]
+		m2, pred = s.findNodeQuorum(nodeID, msg.Q, pred, m2)
 		if len(m2) == 0 {
 			return nil, origPred
 		}
@@ -137,7 +137,7 @@ func (s *Slot) findSliceQuorum(slice []NodeID, pred predicate, m map[NodeID]stru
 
 // Abstract predicate. Concrete types below.
 type predicate interface {
-	test(*Env) bool
+	test(*Msg) bool
 
 	// Allows a predicate to update itself after each successful call to
 	// test, by returning a modified copy of itself for the next call to
@@ -148,10 +148,10 @@ type predicate interface {
 
 // This is a simple function predicate. It does not change from one
 // call to the next.
-type fpred func(*Env) bool
+type fpred func(*Msg) bool
 
-func (f fpred) test(env *Env) bool {
-	return f(env)
+func (f fpred) test(msg *Msg) bool {
+	return f(msg)
 }
 
 func (f fpred) next() predicate {
@@ -164,15 +164,15 @@ type minMaxPred struct {
 	min, max           int  // the current min/max bounds
 	nextMin, nextMax   int  // min/max bounds for when the next predicate is generated
 	finalMin, finalMax *int // each call to next updates the min/max bounds these point to
-	testfn             func(env *Env, min, max int) (bool, int, int)
+	testfn             func(msg *Msg, min, max int) (bool, int, int)
 }
 
-func (p *minMaxPred) test(env *Env) bool {
+func (p *minMaxPred) test(msg *Msg) bool {
 	p.nextMin, p.nextMax = p.min, p.max
 	if p.min > p.max {
 		return false
 	}
-	res, min, max := p.testfn(env, p.min, p.max)
+	res, min, max := p.testfn(msg, p.min, p.max)
 	if !res {
 		return false
 	}
