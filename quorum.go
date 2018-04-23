@@ -59,14 +59,7 @@ func (s *Slot) findQuorum(pred predicate) NodeSet {
 	var m NodeSet
 	m = m.Add(s.V.ID)
 	m, _ = s.findNodeQuorum(s.V.ID, s.V.Q, pred, m)
-	if len(m) == 0 {
-		return nil
-	}
-	var result NodeSet
-	for _, n := range m {
-		result = result.Add(n)
-	}
-	return result
+	return m
 }
 
 // Helper function for findQuorum. It checks that the given node
