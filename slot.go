@@ -67,7 +67,7 @@ var (
 // processes an incoming protocol message and returns an outbound
 // protocol message in response, or nil if the incoming message is
 // ignored.
-func (s *Slot) Handle(msg *Msg) (resp *Msg, err error) {
+func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 	if have, ok := s.M[msg.V]; ok && !have.T.Less(msg.T) && s.Ph != PhNom {
 		// We already have a message from this sender that's the same or
 		// newer.
