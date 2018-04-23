@@ -128,17 +128,21 @@ func nodefn(n *scp.Node, recv <-chan *scp.Msg, send chan<- *scp.Msg, highestSlot
 		case <-timer.C:
 			// xxx should acquire n.mu
 			var prodded bool
+			peers := n.Peers()
 			for _, slot := range n.Pending {
-				if slot.Ph == scp.PhNom {
-					slot.Logf("prodding")
-					prodded = true
-					for _, msg := range slot.M {
+				if slot.Ph != scp.PhNom {
+					continue
+				}
+				for _, peer := range peers {
+					if msg, ok := slot.M[peer]; ok {
 						res, err := n.Handle(msg)
 						if err != nil {
 							n.Logf("error prodding node with %s: %s", msg, err)
 						} else if res != nil {
 							send <- res
 						}
+						prodded = true
+						slot.Logf("prodded")
 					}
 				}
 			}
