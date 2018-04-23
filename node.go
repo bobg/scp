@@ -214,6 +214,8 @@ func (ns NodeSet) find(nodeID NodeID) int {
 	})
 }
 
+// Add produces a NodeSet containing the members of ns plus the
+// element nodeID.
 func (ns NodeSet) Add(nodeID NodeID) NodeSet {
 	index := ns.find(nodeID)
 	if index < len(ns) && nodeID == ns[index] {
@@ -226,6 +228,7 @@ func (ns NodeSet) Add(nodeID NodeID) NodeSet {
 	return result
 }
 
+// Union produces a NodeSet containing all the members of both sets.
 func (ns NodeSet) Union(other NodeSet) NodeSet {
 	if len(ns) == 0 {
 		return other
@@ -256,6 +259,7 @@ func (ns NodeSet) Union(other NodeSet) NodeSet {
 	return result
 }
 
+// Remove produces a NodeSet without the specified element.
 func (ns NodeSet) Remove(nodeID NodeID) NodeSet {
 	index := ns.find(nodeID)
 	if index >= len(ns) || nodeID != ns[index] {
