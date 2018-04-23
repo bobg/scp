@@ -2,6 +2,13 @@
 
 package main
 
+// Usage:
+//   go run toy.go [-seed N] 'alice: bob carol david / bob carol ed / fran gabe hank' 'bob: alice carol david / gabe hank' ...
+// Each argument gives a node's name (before the colon) and the node's
+// quorum slices.
+// Nodes do not specify themselves as quorum slice members, though
+// they are understood to belong to every quorum slice.
+
 import (
 	"bytes"
 	"encoding/binary"
@@ -43,13 +50,6 @@ func (v valType) String() string {
 	return string(v)
 }
 
-// Usage:
-//   go run toy.go [-seed N] 'alice: bob carol david / bob carol ed / fran gabe hank' 'bob: alice carol david / gabe hank' ...
-// Each argument gives a node's name (before the colon) and the node's
-// quorum slices.
-// Nodes do not specify themselves as quorum slice members, though
-// they are understood to belong to every quorum slice.
-
 func main() {
 	seed := flag.Int64("seed", 1, "RNG seed")
 	flag.Parse()
@@ -79,8 +79,6 @@ func main() {
 		entries[nodeID] = entry{node: node, ch: nodeCh}
 		go nodefn(node, nodeCh, ch, &highestSlot)
 	}
-
-	// log.Print(spew.Sdump(entries))
 
 	for msg := range ch {
 		if _, ok := msg.T.(*scp.NomTopic); !ok && int32(msg.I) > highestSlot { // this is the only thread that writes highestSlot, so it's ok to read it non-atomically

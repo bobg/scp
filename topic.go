@@ -3,7 +3,8 @@ package scp
 import "fmt"
 
 // Topic is the abstract type of the payload of an SCP message
-// (conveyed in an envelope, see type Msg).
+// (conveyed in an envelope, see type Msg). The concrete type is one
+// of NomTopic, PrepTopic, CommitTopic, and ExtTopic.
 type Topic interface {
 	BN() int // returns ballot.counter in PREPARE and COMMIT messages
 	Less(Topic) bool

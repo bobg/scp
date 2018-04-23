@@ -89,6 +89,8 @@ func (n *Node) Handle(msg *Msg) (*Msg, error) {
 	return outbound, nil
 }
 
+// ErrNoPrev occurs when trying to compute a hash (with Node.G) for
+// slot i before the node has externalized a value for slot i-1.
 var ErrNoPrev = errors.New("no previous value")
 
 func (n *Node) G(i SlotID, m []byte) (result [32]byte, err error) {
@@ -201,7 +203,8 @@ func (n *Node) Neighbors(i SlotID, num int) ([]NodeID, error) {
 }
 
 // Priority computes a priority for a given peer node that is specific
-// to a given slot and nomination-round.
+// to a given slot and nomination-round. The result is a big-endian
+// 256-bit integer expressed as a [32]byte.
 func (n *Node) Priority(i SlotID, num int, nodeID NodeID) ([32]byte, error) {
 	m := new(bytes.Buffer)
 	m.WriteByte('P')

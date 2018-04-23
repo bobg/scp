@@ -25,7 +25,7 @@ type Slot struct {
 	B      Ballot
 	P, PP  Ballot    // two highest "prepared" ballots with differing values
 	C, H   Ballot    // lowest and highest confirmed-prepared or accepted-commit ballots (depending on phase)
-	AP, CP BallotSet // accepted-prepared, confirmed-prepared; kept sorted
+	AP, CP BallotSet // accepted-prepared, confirmed-prepared
 
 	Upd *time.Timer // timer for invoking a deferred update
 }
@@ -52,8 +52,8 @@ func newSlot(id SlotID, n *Node) *Slot {
 var (
 	// NomRoundInterval determines the duration of a nomination "round."
 	// Round N lasts for a duration of (2+N)*NomRoundInterval.  A node's
-	// neighbor set, and the priorities of the peers in that set,
-	// changes from one round to the next.
+	// neighbor set changes from one round to the next, as do the
+	// priorities of the peers in that set.
 	NomRoundInterval = time.Second
 
 	// DeferredUpdateInterval determines the delay between arming a
@@ -85,8 +85,8 @@ func (s *Slot) Handle(msg *Msg) (resp *Msg, err error) {
 		// "Echo" nominated values by adding them to s.X.
 		switch topic := msg.T.(type) {
 		case *NomTopic:
-			s.X = s.X.AddSet(topic.X)
-			s.X = s.X.AddSet(topic.Y)
+			s.X = s.X.Union(topic.X)
+			s.X = s.X.Union(topic.Y)
 		case *PrepTopic:
 			s.X = s.X.Add(topic.B.X)
 			if !topic.P.IsZero() {
@@ -120,8 +120,8 @@ func (s *Slot) Handle(msg *Msg) (resp *Msg, err error) {
 					return nil, err
 				}
 				if ok {
-					s.X = s.X.AddSet(topic.X)
-					s.X = s.X.AddSet(topic.Y)
+					s.X = s.X.Union(topic.X)
+					s.X = s.X.Union(topic.Y)
 					s.updateYZ()
 					s.B.X = s.Z.Combine()
 				}

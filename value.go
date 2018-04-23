@@ -6,14 +6,25 @@ import (
 	"strings"
 )
 
-// Value is the type of values being voted on by the network.
+// Value is the abstract type of values being voted on by the network.
 type Value interface {
+	// Less tells whether this value is less than another. Values must be totally ordered.
 	Less(Value) bool
+
+	// Combine combines this value with another to produce a third
+	// (which may be the same as either of the inputs). The operation
+	// should be deterministic and commutative.
 	Combine(Value) Value
+
+	// Bytes produces a byte-string representation of the value, not
+	// meant for human consumption.
 	Bytes() []byte
+
+	// String produces a readable representation of the value.
 	String() string
 }
 
+// VEqual tells whether two values are equal.
 func VEqual(a, b Value) bool {
 	if a == nil {
 		return b == nil
@@ -24,6 +35,8 @@ func VEqual(a, b Value) bool {
 	return !a.Less(b) && !b.Less(a)
 }
 
+// VString calls a Value's String method. If the value is nil, returns
+// the string "<nil>".
 func VString(v Value) string {
 	if v == nil {
 		return "<nil>"
@@ -40,7 +53,8 @@ func (vs ValueSet) find(v Value) int {
 	})
 }
 
-// Add adds a Value to a ValueSet.
+// Add produces a ValueSet containing the members of vs plus the
+// element v.
 func (vs ValueSet) Add(v Value) ValueSet {
 	index := vs.find(v)
 	if index < len(vs) && VEqual(v, vs[index]) {
@@ -53,8 +67,8 @@ func (vs ValueSet) Add(v Value) ValueSet {
 	return result
 }
 
-// AddSet adds the members of one ValueSet to another.
-func (vs ValueSet) AddSet(other ValueSet) ValueSet {
+// Union produces a ValueSet containing all the members of both sets.
+func (vs ValueSet) Union(other ValueSet) ValueSet {
 	if len(vs) == 0 {
 		return other
 	}
@@ -84,7 +98,7 @@ func (vs ValueSet) AddSet(other ValueSet) ValueSet {
 	return result
 }
 
-// Remove removes a value from a set.
+// Remove produces a ValueSet without the specified element.
 func (vs ValueSet) Remove(v Value) ValueSet {
 	index := vs.find(v)
 	if index >= len(vs) || !VEqual(v, vs[index]) {
