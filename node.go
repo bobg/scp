@@ -259,6 +259,32 @@ func (ns NodeSet) Union(other NodeSet) NodeSet {
 	return result
 }
 
+// Minus produces a NodeSet with only the members of ns that don't
+// appear in other.
+func (ns NodeSet) Minus(other NodeSet) NodeSet {
+	if len(ns) == 0 || len(other) == 0 {
+		return ns
+	}
+	var (
+		result NodeSet
+		i, j   int
+	)
+	for i < len(ns) && j < len(other) {
+		switch {
+		case ns[i] < other[j]:
+			result = append(result, ns[i])
+			i++
+		case other[j] < ns[i]:
+			j++
+		default:
+			i++
+			j++
+		}
+	}
+	result = append(result, ns[i:]...)
+	return result
+}
+
 // Remove produces a NodeSet without the specified element.
 func (ns NodeSet) Remove(nodeID NodeID) NodeSet {
 	index := ns.find(nodeID)
@@ -275,6 +301,11 @@ func (ns NodeSet) Remove(nodeID NodeID) NodeSet {
 func (ns NodeSet) Contains(nodeID NodeID) bool {
 	index := ns.find(nodeID)
 	return index < len(ns) && nodeID == ns[index]
+}
+
+// Copy returns a copy of ns.
+func (ns NodeSet) Copy() NodeSet {
+	return NodeSet(append([]NodeID{}, ns...))
 }
 
 var maxUint256 = [32]byte{

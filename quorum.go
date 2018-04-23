@@ -56,14 +56,14 @@ func (s *Slot) findBlockingSet(pred predicate) NodeSet {
 
 // Finds a quorum in which every node satisfies the given predicate.
 func (s *Slot) findQuorum(pred predicate) NodeSet {
-	m := make(map[NodeID]struct{})
-	m[s.V.ID] = struct{}{}
+	var m NodeSet
+	m = m.Add(s.V.ID)
 	m, _ = s.findNodeQuorum(s.V.ID, s.V.Q, pred, m)
 	if len(m) == 0 {
 		return nil
 	}
 	var result NodeSet
-	for n := range m {
+	for _, n := range m {
 		result = result.Add(n)
 	}
 	return result
@@ -82,7 +82,7 @@ func (s *Slot) findQuorum(pred predicate) NodeSet {
 //
 // Returns the new m and pred on success, nil and the original pred on
 // failure.
-func (s *Slot) findNodeQuorum(nodeID NodeID, q []NodeSet, pred predicate, m map[NodeID]struct{}) (map[NodeID]struct{}, predicate) {
+func (s *Slot) findNodeQuorum(nodeID NodeID, q []NodeSet, pred predicate, m NodeSet) (NodeSet, predicate) {
 	for _, slice := range q {
 		m2, nextPred := s.findSliceQuorum(slice, pred, m)
 		if len(m2) > 0 {
@@ -101,13 +101,8 @@ func (s *Slot) findNodeQuorum(nodeID NodeID, q []NodeSet, pred predicate, m map[
 //
 // Returns an updated m and pred on success, nil and the original pred
 // on failure.
-func (s *Slot) findSliceQuorum(slice NodeSet, pred predicate, m map[NodeID]struct{}) (map[NodeID]struct{}, predicate) {
-	var newNodeIDs NodeSet // nodes in slice not yet visited (according to m)
-	for _, nodeID := range slice {
-		if _, ok := m[nodeID]; !ok {
-			newNodeIDs = newNodeIDs.Add(nodeID)
-		}
-	}
+func (s *Slot) findSliceQuorum(slice NodeSet, pred predicate, m NodeSet) (NodeSet, predicate) {
+	newNodeIDs := slice.Minus(m) // nodes in slice not yet visited (according to m)
 	if len(newNodeIDs) == 0 {
 		return m, pred
 	}
@@ -118,13 +113,8 @@ func (s *Slot) findSliceQuorum(slice NodeSet, pred predicate, m map[NodeID]struc
 		}
 		pred = pred.next()
 	}
-	m2 := make(map[NodeID]struct{})
-	for nodeID := range m {
-		m2[nodeID] = struct{}{}
-	}
-	for _, nodeID := range newNodeIDs {
-		m2[nodeID] = struct{}{}
-	}
+	m2 := m.Copy()
+	m2 = m2.Union(newNodeIDs)
 	for _, nodeID := range newNodeIDs {
 		msg := s.M[nodeID]
 		m2, pred = s.findNodeQuorum(nodeID, msg.Q, pred, m2)
