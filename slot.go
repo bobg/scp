@@ -330,15 +330,20 @@ func (s *Slot) setBX() {
 	}
 }
 
+// Round tells the current (time-based) nomination round.
+//
+// Nomination round N lasts for a duration of
+// (2+N)*NomRoundInterval. Via the quadratic formula this tells us
+// that after an elapsed time of T, it's round sqrt(1+T)-1.
+func (s *Slot) Round() int {
+	elapsed := float64(time.Since(s.T)) / float64(NomRoundInterval)
+	return int(math.Sqrt(1.0+elapsed) - 1.0)
+}
+
 // Tells whether the given peer has or had the maximum priority in the
 // current or any earlier nomination round.
 func (s *Slot) maxPrioritySender(nodeID NodeID) (bool, error) {
-	// Nomination round N lasts for a duration of
-	// (2+N)*NomRoundInterval. Via the quadratic formula this tells us
-	// that after an elapsed time of T, it's round sqrt(1+T)-1.
-	elapsed := float64(time.Since(s.T)) / float64(NomRoundInterval)
-	thisRound := int(math.Sqrt(1.0+elapsed) - 1.0)
-	for round := thisRound; round >= 0; round-- {
+	for round := s.Round(); round >= 0; round-- {
 		neighbors, err := s.V.Neighbors(s.ID, round)
 		if err != nil {
 			return false, err
