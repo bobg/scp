@@ -26,7 +26,7 @@ package scp
 // single peer from each of a node's quorum slices is sufficient to
 // form a blocking set.
 
-func (s *Slot) findBlockingSetOrQuorum(pred predicate) []NodeID {
+func (s *Slot) findBlockingSetOrQuorum(pred predicate) NodeSet {
 	nodeIDs := s.findBlockingSet(pred)
 	if len(nodeIDs) > 0 {
 		return nodeIDs
@@ -35,14 +35,14 @@ func (s *Slot) findBlockingSetOrQuorum(pred predicate) []NodeID {
 }
 
 // Checks that at least one node in each quorum slice satisfies pred.
-func (s *Slot) findBlockingSet(pred predicate) []NodeID {
-	var result []NodeID
+func (s *Slot) findBlockingSet(pred predicate) NodeSet {
+	var result NodeSet
 	for _, slice := range s.V.Q {
 		var found bool
 		for _, nodeID := range slice {
 			if msg, ok := s.M[nodeID]; ok && pred.test(msg) {
 				found = true
-				result = append(result, nodeID)
+				result = result.Add(nodeID)
 				pred = pred.next()
 				break
 			}
@@ -55,16 +55,16 @@ func (s *Slot) findBlockingSet(pred predicate) []NodeID {
 }
 
 // Finds a quorum in which every node satisfies the given predicate.
-func (s *Slot) findQuorum(pred predicate) []NodeID {
+func (s *Slot) findQuorum(pred predicate) NodeSet {
 	m := make(map[NodeID]struct{})
 	m[s.V.ID] = struct{}{}
 	m, _ = s.findNodeQuorum(s.V.ID, s.V.Q, pred, m)
 	if len(m) == 0 {
 		return nil
 	}
-	result := make([]NodeID, 0, len(m))
+	var result NodeSet
 	for n := range m {
-		result = append(result, n)
+		result = result.Add(n)
 	}
 	return result
 }
@@ -82,7 +82,7 @@ func (s *Slot) findQuorum(pred predicate) []NodeID {
 //
 // Returns the new m and pred on success, nil and the original pred on
 // failure.
-func (s *Slot) findNodeQuorum(nodeID NodeID, q [][]NodeID, pred predicate, m map[NodeID]struct{}) (map[NodeID]struct{}, predicate) {
+func (s *Slot) findNodeQuorum(nodeID NodeID, q []NodeSet, pred predicate, m map[NodeID]struct{}) (map[NodeID]struct{}, predicate) {
 	for _, slice := range q {
 		m2, nextPred := s.findSliceQuorum(slice, pred, m)
 		if len(m2) > 0 {
@@ -101,11 +101,11 @@ func (s *Slot) findNodeQuorum(nodeID NodeID, q [][]NodeID, pred predicate, m map
 //
 // Returns an updated m and pred on success, nil and the original pred
 // on failure.
-func (s *Slot) findSliceQuorum(slice []NodeID, pred predicate, m map[NodeID]struct{}) (map[NodeID]struct{}, predicate) {
-	var newNodeIDs []NodeID // nodes in slice not yet visited (according to m)
+func (s *Slot) findSliceQuorum(slice NodeSet, pred predicate, m map[NodeID]struct{}) (map[NodeID]struct{}, predicate) {
+	var newNodeIDs NodeSet // nodes in slice not yet visited (according to m)
 	for _, nodeID := range slice {
 		if _, ok := m[nodeID]; !ok {
-			newNodeIDs = append(newNodeIDs, nodeID)
+			newNodeIDs = newNodeIDs.Add(nodeID)
 		}
 	}
 	if len(newNodeIDs) == 0 {

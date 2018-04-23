@@ -21,7 +21,7 @@ type Node struct {
 	// Q is the node's set of quorum slices. For compactness it does not
 	// include the node itself, though the node is understood to be in
 	// every slice.
-	Q [][]NodeID
+	Q []NodeSet
 
 	// Pending holds Slot objects during nomination and balloting.
 	Pending map[SlotID]*Slot
@@ -34,7 +34,7 @@ type Node struct {
 }
 
 // NewNode produces a new node.
-func NewNode(id NodeID, q [][]NodeID) *Node {
+func NewNode(id NodeID, q []NodeSet) *Node {
 	return &Node{
 		ID:      id,
 		Q:       q,
@@ -93,6 +93,9 @@ func (n *Node) Handle(msg *Msg) (*Msg, error) {
 // slot i before the node has externalized a value for slot i-1.
 var ErrNoPrev = errors.New("no previous value")
 
+// G produces a node- and slot-specific 32-byte hash for a given
+// message m. It is an error to call this on slot i>1 before n has
+// externalized a value for slot i-1.
 func (n *Node) G(i SlotID, m []byte) (result [32]byte, err error) {
 	hasher := sha256.New()
 
@@ -115,7 +118,7 @@ func (n *Node) G(i SlotID, m []byte) (result [32]byte, err error) {
 }
 
 // Weight returns the fraction of n's quorum slices in which id
-// appears.  Return value is the fraction and (as an optimization) a
+// appears. Return value is the fraction and (as an optimization) a
 // bool indicating whether it's exactly 1.
 func (n *Node) Weight(id NodeID) (float64, bool) {
 	if id == n.ID {
@@ -138,40 +141,21 @@ func (n *Node) Weight(id NodeID) (float64, bool) {
 
 // Peers returns a flattened, uniquified list of the node IDs in n's
 // quorum slices, not including n's own ID.
-func (n *Node) Peers() []NodeID {
-	var result []NodeID
+func (n *Node) Peers() NodeSet {
+	var result NodeSet
 	for _, slice := range n.Q {
-		for _, id := range slice {
-			result = append(result, id)
-		}
+		result = result.Union(slice)
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i] < result[j]
-	})
-	var (
-		to   int
-		last NodeID
-	)
-	for from := 0; from < len(result); from++ {
-		if result[from] == last {
-			continue
-		}
-		last = result[from]
-		if from != to {
-			result[to] = result[from]
-		}
-		to++
-	}
-	return result[:to]
+	return result
 }
 
 // Neighbors produces a deterministic subset of a node's peers (which
 // may include itself) that is specific to a given slot and
 // nomination-round.
-func (n *Node) Neighbors(i SlotID, num int) ([]NodeID, error) {
+func (n *Node) Neighbors(i SlotID, num int) (NodeSet, error) {
 	peers := n.Peers()
-	peers = append(peers, n.ID)
-	var result []NodeID
+	peers = peers.Add(n.ID)
+	var result NodeSet
 	for _, nodeID := range peers {
 		weight64, is1 := n.Weight(nodeID)
 		var hwBytes []byte
@@ -196,7 +180,7 @@ func (n *Node) Neighbors(i SlotID, num int) ([]NodeID, error) {
 			return nil, err
 		}
 		if bytes.Compare(g[:], hw[:]) < 0 {
-			result = append(result, nodeID)
+			result = result.Add(nodeID)
 		}
 	}
 	return result, nil
@@ -219,6 +203,74 @@ func (n *Node) Logf(f string, a ...interface{}) {
 	f = "node %s: " + f
 	a = append([]interface{}{n.ID}, a...)
 	log.Printf(f, a...)
+}
+
+// NodeSet is a set of NodeIDs, implemented as a sorted slice.
+type NodeSet []NodeID
+
+func (ns NodeSet) find(nodeID NodeID) int {
+	return sort.Search(len(ns), func(n int) bool {
+		return ns[n] >= nodeID
+	})
+}
+
+func (ns NodeSet) Add(nodeID NodeID) NodeSet {
+	index := ns.find(nodeID)
+	if index < len(ns) && nodeID == ns[index] {
+		return ns
+	}
+	var result NodeSet
+	result = append(result, ns[:index]...)
+	result = append(result, nodeID)
+	result = append(result, ns[index:]...)
+	return result
+}
+
+func (ns NodeSet) Union(other NodeSet) NodeSet {
+	if len(ns) == 0 {
+		return other
+	}
+	if len(other) == 0 {
+		return ns
+	}
+	var (
+		i, j   int
+		result NodeSet
+	)
+	for i < len(ns) && j < len(other) {
+		switch {
+		case ns[i] < other[j]:
+			result = append(result, ns[i])
+			i++
+		case other[j] < ns[i]:
+			result = append(result, other[j])
+			j++
+		default:
+			result = append(result, ns[i])
+			i++
+			j++
+		}
+	}
+	result = append(result, ns[i:]...)
+	result = append(result, other[j:]...)
+	return result
+}
+
+func (ns NodeSet) Remove(nodeID NodeID) NodeSet {
+	index := ns.find(nodeID)
+	if index >= len(ns) || nodeID != ns[index] {
+		return ns
+	}
+	var result NodeSet
+	result = append(result, ns[:index]...)
+	result = append(result, ns[index+1:]...)
+	return result
+}
+
+// Contains tests whether ns contains v.
+func (ns NodeSet) Contains(nodeID NodeID) bool {
+	index := ns.find(nodeID)
+	return index < len(ns) && nodeID == ns[index]
 }
 
 var maxUint256 = [32]byte{
