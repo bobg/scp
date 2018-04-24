@@ -68,13 +68,19 @@ var (
 // protocol message in response, or nil if the incoming message is
 // ignored.
 func (s *Slot) Handle(msg *Msg) (*Msg, error) {
-	if have, ok := s.M[msg.V]; ok && !have.T.Less(msg.T) && s.Ph != PhNom {
+	var renom bool
+	if have, ok := s.M[msg.V]; ok && !have.T.Less(msg.T) {
 		// We already have a message from this sender that's the same or
 		// newer.
-		return nil, nil
+		if s.Ph != PhNom {
+			return nil, nil
+		}
+		// Reconsider old messages during the nomination phase, since time
+		// elapsing can change how we handle them.
+		renom = true
+	} else {
+		s.M[msg.V] = msg
 	}
-
-	s.M[msg.V] = msg
 
 	switch s.Ph { // note, s.Ph == PhExt should never be true
 	case PhNom:
@@ -82,6 +88,11 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 		if err != nil {
 			return nil, err
 		}
+		if renom && !ok {
+			return nil, nil
+		}
+
+		x, y, z := len(s.X), len(s.Y), len(s.Z)
 
 		if ok {
 			// "Echo" nominated values by adding them to s.X.
@@ -107,6 +118,10 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 		// Promote accepted-nominated values from X to Y, and
 		// confirmed-nominated values from Y to Z.
 		s.updateYZ()
+
+		if renom && len(s.X) == x && len(s.Y) == y && len(s.Z) == z {
+			return nil, nil
+		}
 
 		if len(s.Z) > 0 {
 			s.Ph = PhPrep
@@ -182,7 +197,7 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 				// seconds.
 				if s.Upd == nil { // don't bother if a timer's already armed
 					nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
-						return msg.T.BN() > s.B.N
+						return msg.T.BN() >= s.B.N
 					}))
 					if len(nodeIDs) > 0 {
 						s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(DeferredUpdateInterval)), s.deferredUpdate)

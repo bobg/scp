@@ -11,17 +11,14 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"flag"
 	"log"
 	"math/rand"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/bobg/scp"
-	"golang.org/x/time/rate"
 )
 
 type entry struct {
@@ -60,7 +57,6 @@ func main() {
 	entries := make(map[scp.NodeID]entry)
 
 	ch := make(chan *scp.Msg, 10000)
-	var highestSlot int32
 	for _, arg := range flag.Args() {
 		parts := strings.SplitN(arg, ":", 2)
 		nodeID := scp.NodeID(parts[0])
@@ -79,46 +75,91 @@ func main() {
 		node := scp.NewNode(nodeID, q)
 		nodeCh := make(chan *scp.Msg, 1000)
 		entries[nodeID] = entry{node: node, ch: nodeCh}
-		go nodefn(node, nodeCh, ch, &highestSlot)
+		go nodefn(node, nodeCh, ch)
 	}
 
-	for msg := range ch {
-		if _, ok := msg.T.(*scp.NomTopic); !ok && int32(msg.I) > highestSlot { // this is the only thread that writes highestSlot, so it's ok to read it non-atomically
-			atomic.StoreInt32(&highestSlot, int32(msg.I))
-			log.Printf("highestSlot is now %d", highestSlot)
-		}
+	for slotID := scp.SlotID(1); ; slotID++ {
+		topics := make(map[scp.NodeID]scp.Topic)
 
-		// Send this message to every other node.
-		for nodeID, entry := range entries {
-			if nodeID == msg.V {
+		for _, e := range entries {
+			e.ch <- nil // a nil message means "start a new slot"
+			topics[e.node.ID] = nil
+		}
+		for msg := range ch {
+			if msg.I < slotID {
+				// discard messages about old slots
 				continue
 			}
-			entry.ch <- msg
+
+			n := entries[msg.V].node
+			if topics[msg.V] == nil {
+				n.Logf("%s", msg)
+			} else {
+				switch topics[msg.V].(type) {
+				case *scp.NomTopic:
+					if _, ok := msg.T.(*scp.PrepTopic); ok {
+						n.Logf("%s", msg)
+					}
+				case *scp.PrepTopic:
+					if _, ok := msg.T.(*scp.CommitTopic); ok {
+						n.Logf("%s", msg)
+					}
+				case *scp.CommitTopic:
+					if _, ok := msg.T.(*scp.ExtTopic); ok {
+						n.Logf("%s", msg)
+					}
+				}
+			}
+			topics[msg.V] = msg.T
+
+			allExt := true
+			for _, topic := range topics {
+				if _, ok := topic.(*scp.ExtTopic); !ok {
+					allExt = false
+					break
+				}
+			}
+			if allExt {
+				log.Print("all externalized")
+				break
+			}
+
+			// Send this message to every other node.
+			for nodeID, e := range entries {
+				if nodeID == msg.V {
+					continue
+				}
+				e.ch <- msg
+			}
 		}
 	}
 }
 
-const (
-	minNomDelayMS = 500
-	maxNomDelayMS = 2000
-)
-
 // runs as a goroutine
-func nodefn(n *scp.Node, recv <-chan *scp.Msg, send chan<- *scp.Msg, highestSlot *int32) {
-	limiter := rate.NewLimiter(10, 10)
+func nodefn(n *scp.Node, recv <-chan *scp.Msg, send chan<- *scp.Msg) {
 	for {
-		// Some time in the next minNomDelayMS to maxNomDelayMS
-		// milliseconds.
-		timer := time.NewTimer(time.Duration((minNomDelayMS + rand.Intn(maxNomDelayMS-minNomDelayMS)) * int(time.Millisecond)))
+		// Prod the node after a second of inactivity.
+		timer := time.NewTimer(time.Second)
 
 		select {
 		case msg := <-recv:
-			// Never mind about the nomination timer.
+			if msg == nil {
+				// New round, try to nominate something.
+				var slotID scp.SlotID
+				for i := range n.Ext {
+					if i > slotID {
+						slotID = i
+					}
+				}
+				slotID++
+				val := foods[rand.Intn(len(foods))]
+				msg = scp.NewMsg(n.ID, slotID, n.Q, &scp.NomTopic{X: scp.ValueSet{val}})
+			}
+
+			// Never mind about the prodding timer.
 			if !timer.Stop() {
 				<-timer.C
 			}
-
-			limiter.Wait(context.Background())
 
 			res, err := n.Handle(msg)
 			if err != nil {
@@ -126,13 +167,12 @@ func nodefn(n *scp.Node, recv <-chan *scp.Msg, send chan<- *scp.Msg, highestSlot
 				continue
 			}
 			if res != nil {
-				n.Logf("handled %s -> %s", msg, res)
+				// n.Logf("handled %s -> %s", msg, res)
 				send <- res
 			}
 
 		case <-timer.C:
 			// xxx should acquire n.mu
-			var prodded bool
 			peers := n.Peers()
 			for _, slot := range n.Pending {
 				if slot.Ph != scp.PhNom {
@@ -144,35 +184,11 @@ func nodefn(n *scp.Node, recv <-chan *scp.Msg, send chan<- *scp.Msg, highestSlot
 						if err != nil {
 							n.Logf("error prodding node with %s: %s", msg, err)
 						} else if res != nil {
+							// n.Logf("prodded with %s -> %s", msg, res)
 							send <- res
 						}
-						prodded = true
 					}
 				}
-			}
-
-			if prodded {
-				n.Logf("prodded")
-				continue
-			}
-
-			slotID := 1 + scp.SlotID(atomic.LoadInt32(highestSlot))
-			val := foods[rand.Intn(len(foods))]
-
-			// Send a nominate message "from" the node to itself. If it has
-			// max priority among its neighbors (for this slot) it will
-			// propagate the nomination.
-			var vs scp.ValueSet
-			vs = vs.Add(val)
-			msg := scp.NewMsg(n.ID, scp.SlotID(slotID), n.Q, &scp.NomTopic{X: vs})
-			n.Logf("trying to get something started with %s", msg)
-			res, err := n.Handle(msg)
-			if err != nil {
-				n.Logf("could not handle %s: %s", msg, err)
-				continue
-			}
-			if res != nil {
-				send <- res
 			}
 		}
 	}
