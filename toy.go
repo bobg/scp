@@ -79,57 +79,99 @@ func main() {
 	}
 
 	for slotID := scp.SlotID(1); ; slotID++ {
-		topics := make(map[scp.NodeID]scp.Topic)
+		msgs := make(map[scp.NodeID]*scp.Msg) // holds the latest message seen from each node
 
 		for _, e := range entries {
 			e.ch <- nil // a nil message means "start a new slot"
-			topics[e.node.ID] = nil
+			msgs[e.node.ID] = nil
 		}
-		for msg := range ch {
-			if msg.I < slotID {
-				// discard messages about old slots
-				continue
-			}
 
-			n := entries[msg.V].node
-			if topics[msg.V] == nil {
-				n.Logf("%s", msg)
-			} else {
-				switch topics[msg.V].(type) {
-				case *scp.NomTopic:
-					if _, ok := msg.T.(*scp.PrepTopic); ok {
-						n.Logf("%s", msg)
-					}
-				case *scp.PrepTopic:
-					if _, ok := msg.T.(*scp.CommitTopic); ok {
-						n.Logf("%s", msg)
-					}
-				case *scp.CommitTopic:
-					if _, ok := msg.T.(*scp.ExtTopic); ok {
-						n.Logf("%s", msg)
-					}
+		for looping := true; looping; {
+			// After one second of inactivity, resend the latest messages to everyone.
+			timer := time.NewTimer(time.Second)
+
+			select {
+			case msg := <-ch:
+				// Never mind about resending messages.
+				if !timer.Stop() {
+					<-timer.C
 				}
-			}
-			topics[msg.V] = msg.T
-
-			allExt := true
-			for _, topic := range topics {
-				if _, ok := topic.(*scp.ExtTopic); !ok {
-					allExt = false
-					break
-				}
-			}
-			if allExt {
-				log.Print("all externalized")
-				break
-			}
-
-			// Send this message to every other node.
-			for nodeID, e := range entries {
-				if nodeID == msg.V {
+				if msg.I < slotID {
+					// discard messages about old slots
 					continue
 				}
-				e.ch <- msg
+				n := entries[msg.V].node
+				if msgs[msg.V] == nil {
+					n.Logf("%s", msg)
+				} else {
+					switch msgs[msg.V].T.(type) {
+					case *scp.NomTopic:
+						if _, ok := msg.T.(*scp.PrepTopic); ok {
+							n.Logf("%s", msg)
+						}
+					case *scp.PrepTopic:
+						if _, ok := msg.T.(*scp.CommitTopic); ok {
+							n.Logf("%s", msg)
+						}
+					case *scp.CommitTopic:
+						if _, ok := msg.T.(*scp.ExtTopic); ok {
+							n.Logf("%s", msg)
+						}
+					}
+				}
+				msgs[msg.V] = msg
+
+				allExt := true
+				for _, m := range msgs {
+					if m == nil {
+						allExt = false
+						break
+					}
+					if _, ok := m.T.(*scp.ExtTopic); !ok {
+						allExt = false
+						break
+					}
+				}
+				if allExt {
+					log.Print("all externalized")
+					looping = false
+				}
+
+				// Send this message to every other node.
+				for nodeID, e := range entries {
+					if nodeID == msg.V {
+						continue
+					}
+					e.ch <- msg
+				}
+
+			case <-timer.C:
+				// It's too quiet around here.
+				for nodeID, latest := range msgs {
+					if latest == nil {
+						continue
+					}
+					for _, e := range entries {
+						n := e.node
+						if n.ID == nodeID {
+							continue
+						}
+						res, err := n.Handle(latest)
+						if err != nil {
+							n.Logf("could not handle resend of %s: %s", latest, err)
+							continue
+						}
+						if res == nil {
+							continue
+						}
+						for _, e2 := range entries {
+							if e2.node.ID == nodeID {
+								continue
+							}
+							e2.ch <- res
+						}
+					}
+				}
 			}
 		}
 	}
@@ -137,59 +179,28 @@ func main() {
 
 // runs as a goroutine
 func nodefn(n *scp.Node, recv <-chan *scp.Msg, send chan<- *scp.Msg) {
-	for {
-		// Prod the node after a second of inactivity.
-		timer := time.NewTimer(time.Second)
-
-		select {
-		case msg := <-recv:
-			if msg == nil {
-				// New round, try to nominate something.
-				var slotID scp.SlotID
-				for i := range n.Ext {
-					if i > slotID {
-						slotID = i
-					}
-				}
-				slotID++
-				val := foods[rand.Intn(len(foods))]
-				msg = scp.NewMsg(n.ID, slotID, n.Q, &scp.NomTopic{X: scp.ValueSet{val}})
-			}
-
-			// Never mind about the prodding timer.
-			if !timer.Stop() {
-				<-timer.C
-			}
-
-			res, err := n.Handle(msg)
-			if err != nil {
-				n.Logf("could not handle %s: %s", msg, err)
-				continue
-			}
-			if res != nil {
-				// n.Logf("handled %s -> %s", msg, res)
-				send <- res
-			}
-
-		case <-timer.C:
-			// xxx should acquire n.mu
-			peers := n.Peers()
-			for _, slot := range n.Pending {
-				if slot.Ph != scp.PhNom {
-					continue
-				}
-				for _, peer := range peers {
-					if msg, ok := slot.M[peer]; ok {
-						res, err := n.Handle(msg)
-						if err != nil {
-							n.Logf("error prodding node with %s: %s", msg, err)
-						} else if res != nil {
-							// n.Logf("prodded with %s -> %s", msg, res)
-							send <- res
-						}
-					}
+	for msg := range recv {
+		if msg == nil {
+			// New round, try to nominate something.
+			var slotID scp.SlotID
+			for i := range n.Ext {
+				if i > slotID {
+					slotID = i
 				}
 			}
+			slotID++
+			val := foods[rand.Intn(len(foods))]
+			msg = scp.NewMsg(n.ID, slotID, n.Q, &scp.NomTopic{X: scp.ValueSet{val}})
+		}
+
+		res, err := n.Handle(msg)
+		if err != nil {
+			n.Logf("could not handle %s: %s", msg, err)
+			continue
+		}
+		if res != nil {
+			// n.Logf("handled %s -> %s", msg, res)
+			send <- res
 		}
 	}
 }
