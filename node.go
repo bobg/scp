@@ -1,3 +1,4 @@
+//go:generate go run genset.go
 package scp
 
 import (
@@ -6,13 +7,14 @@ import (
 	"errors"
 	"log"
 	"math/big"
-	"sort"
 	"sync"
 
 	"github.com/davecgh/go-xdr/xdr"
 )
 
 type NodeID string
+
+func (n NodeID) Less(other NodeID) bool { return n < other }
 
 // Node is the type of a participating SCP node.
 type Node struct {
@@ -21,7 +23,7 @@ type Node struct {
 	// Q is the node's set of quorum slices. For compactness it does not
 	// include the node itself, though the node is understood to be in
 	// every slice.
-	Q []NodeSet
+	Q []NodeIDSet
 
 	// Pending holds Slot objects during nomination and balloting.
 	Pending map[SlotID]*Slot
@@ -34,7 +36,7 @@ type Node struct {
 }
 
 // NewNode produces a new node.
-func NewNode(id NodeID, q []NodeSet) *Node {
+func NewNode(id NodeID, q []NodeIDSet) *Node {
 	return &Node{
 		ID:      id,
 		Q:       q,
@@ -141,8 +143,8 @@ func (n *Node) Weight(id NodeID) (float64, bool) {
 
 // Peers returns a flattened, uniquified list of the node IDs in n's
 // quorum slices, not including n's own ID.
-func (n *Node) Peers() NodeSet {
-	var result NodeSet
+func (n *Node) Peers() NodeIDSet {
+	var result NodeIDSet
 	for _, slice := range n.Q {
 		result = result.Union(slice)
 	}
@@ -152,10 +154,10 @@ func (n *Node) Peers() NodeSet {
 // Neighbors produces a deterministic subset of a node's peers (which
 // may include itself) that is specific to a given slot and
 // nomination-round.
-func (n *Node) Neighbors(i SlotID, num int) (NodeSet, error) {
+func (n *Node) Neighbors(i SlotID, num int) (NodeIDSet, error) {
 	peers := n.Peers()
 	peers = peers.Add(n.ID)
-	var result NodeSet
+	var result NodeIDSet
 	for _, nodeID := range peers {
 		weight64, is1 := n.Weight(nodeID)
 		var hwBytes []byte
@@ -203,104 +205,6 @@ func (n *Node) Logf(f string, a ...interface{}) {
 	f = "node %s: " + f
 	a = append([]interface{}{n.ID}, a...)
 	log.Printf(f, a...)
-}
-
-// NodeSet is a set of NodeIDs, implemented as a sorted slice.
-type NodeSet []NodeID
-
-func (ns NodeSet) find(nodeID NodeID) int {
-	return sort.Search(len(ns), func(n int) bool {
-		return ns[n] >= nodeID
-	})
-}
-
-// Add produces a NodeSet containing the members of ns plus the
-// element nodeID.
-func (ns NodeSet) Add(nodeID NodeID) NodeSet {
-	index := ns.find(nodeID)
-	if index < len(ns) && nodeID == ns[index] {
-		return ns
-	}
-	var result NodeSet
-	result = append(result, ns[:index]...)
-	result = append(result, nodeID)
-	result = append(result, ns[index:]...)
-	return result
-}
-
-// Union produces a NodeSet containing all the members of both sets.
-func (ns NodeSet) Union(other NodeSet) NodeSet {
-	if len(ns) == 0 {
-		return other
-	}
-	if len(other) == 0 {
-		return ns
-	}
-	var (
-		i, j   int
-		result NodeSet
-	)
-	for i < len(ns) && j < len(other) {
-		switch {
-		case ns[i] < other[j]:
-			result = append(result, ns[i])
-			i++
-		case other[j] < ns[i]:
-			result = append(result, other[j])
-			j++
-		default:
-			result = append(result, ns[i])
-			i++
-			j++
-		}
-	}
-	result = append(result, ns[i:]...)
-	result = append(result, other[j:]...)
-	return result
-}
-
-// Minus produces a NodeSet with only the members of ns that don't
-// appear in other.
-func (ns NodeSet) Minus(other NodeSet) NodeSet {
-	if len(ns) == 0 || len(other) == 0 {
-		return ns
-	}
-	var (
-		result NodeSet
-		i, j   int
-	)
-	for i < len(ns) && j < len(other) {
-		switch {
-		case ns[i] < other[j]:
-			result = append(result, ns[i])
-			i++
-		case other[j] < ns[i]:
-			j++
-		default:
-			i++
-			j++
-		}
-	}
-	result = append(result, ns[i:]...)
-	return result
-}
-
-// Remove produces a NodeSet without the specified element.
-func (ns NodeSet) Remove(nodeID NodeID) NodeSet {
-	index := ns.find(nodeID)
-	if index >= len(ns) || nodeID != ns[index] {
-		return ns
-	}
-	var result NodeSet
-	result = append(result, ns[:index]...)
-	result = append(result, ns[index+1:]...)
-	return result
-}
-
-// Contains tests whether ns contains v.
-func (ns NodeSet) Contains(nodeID NodeID) bool {
-	index := ns.find(nodeID)
-	return index < len(ns) && nodeID == ns[index]
 }
 
 var maxUint256 = [32]byte{

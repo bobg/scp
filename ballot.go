@@ -2,7 +2,6 @@ package scp
 
 import (
 	"fmt"
-	"sort"
 )
 
 // Ballot is an SCP ballot.
@@ -38,12 +37,12 @@ func (b Ballot) Less(other Ballot) bool {
 
 // Equal tells whether a ballot is equal to another.
 func (b Ballot) Equal(other Ballot) bool {
-	return b.N == other.N && VEqual(b.X, other.X)
+	return b.N == other.N && ValueEqual(b.X, other.X)
 }
 
 // Aborts tells whether a vote to prepare one ballot aborts another.
 func (b Ballot) Aborts(other Ballot) bool {
-	return other.N < b.N && !VEqual(other.X, b.X)
+	return other.N < b.N && !ValueEqual(other.X, b.X)
 }
 
 // String produces a readable representation of a ballot.
@@ -52,41 +51,4 @@ func (b Ballot) String() string {
 		return "<>"
 	}
 	return fmt.Sprintf("<%d,%s>", b.N, VString(b.X))
-}
-
-// BallotSet is a set of ballots, implemented as a sorted slice.
-type BallotSet []Ballot
-
-func (bs BallotSet) find(b Ballot) int {
-	return sort.Search(len(bs), func(n int) bool {
-		return !bs[n].Less(b)
-	})
-}
-
-func (bs BallotSet) Add(b Ballot) BallotSet {
-	index := bs.find(b)
-	if index < len(bs) && b.Equal(bs[index]) {
-		return bs
-	}
-	var result BallotSet
-	result = append(result, bs[:index]...)
-	result = append(result, b)
-	result = append(result, bs[index:]...)
-	return result
-}
-
-func (bs BallotSet) Remove(b Ballot) BallotSet {
-	index := bs.find(b)
-	if index >= len(bs) || !b.Equal(bs[index]) {
-		return bs
-	}
-	var result BallotSet
-	result = append(result, bs[:index]...)
-	result = append(result, bs[index+1:]...)
-	return result
-}
-
-func (bs BallotSet) Contains(b Ballot) bool {
-	index := bs.find(b)
-	return index < len(bs) && b.Equal(bs[index])
 }

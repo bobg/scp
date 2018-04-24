@@ -7,17 +7,17 @@ import (
 
 // Msg is an SCP protocol message.
 type Msg struct {
-	C int32     // A counter for identifying this envelope, does not participate in the protocol.
-	V NodeID    // ID of the node sending this message.
-	I SlotID    // ID of the slot that this message is about.
-	Q []NodeSet // Quorum slices of the sending node.
-	T Topic     // The payload: a *NomTopic, *PrepTopic, *CommitTopic, or *ExtTopic.
+	C int32       // A counter for identifying this envelope, does not participate in the protocol.
+	V NodeID      // ID of the node sending this message.
+	I SlotID      // ID of the slot that this message is about.
+	Q []NodeIDSet // Quorum slices of the sending node.
+	T Topic       // The payload: a *NomTopic, *PrepTopic, *CommitTopic, or *ExtTopic.
 }
 
 var msgCounter int32
 
 // NewMsg produces a new message.
-func NewMsg(v NodeID, i SlotID, q []NodeSet, t Topic) *Msg {
+func NewMsg(v NodeID, i SlotID, q []NodeIDSet, t Topic) *Msg {
 	c := atomic.AddInt32(&msgCounter, 1)
 	return &Msg{
 		C: c,
@@ -44,13 +44,13 @@ func (e *Msg) acceptsNominated(v Value) bool {
 		return topic.Y.Contains(v)
 
 	case *PrepTopic:
-		return VEqual(topic.B.X, v) || VEqual(topic.P.X, v) || VEqual(topic.PP.X, v)
+		return ValueEqual(topic.B.X, v) || ValueEqual(topic.P.X, v) || ValueEqual(topic.PP.X, v)
 
 	case *CommitTopic:
-		return VEqual(topic.B.X, v)
+		return ValueEqual(topic.B.X, v)
 
 	case *ExtTopic:
-		return VEqual(topic.C.X, v)
+		return ValueEqual(topic.C.X, v)
 	}
 	return false // not reached
 }
@@ -77,18 +77,18 @@ func (e *Msg) acceptsPrepared(b Ballot) bool {
 			}
 			if topic.CN > 0 {
 				// include "vote commit" as "accept prepared"
-				return topic.CN <= b.N && b.N <= topic.HN && VEqual(b.X, topic.B.X)
+				return topic.CN <= b.N && b.N <= topic.HN && ValueEqual(b.X, topic.B.X)
 			}
 		}
 
 	case *CommitTopic:
-		if VEqual(b.X, topic.B.X) {
+		if ValueEqual(b.X, topic.B.X) {
 			// include "vote commit" and "accept commit" as "accept prepared"
 			return b.N >= topic.CN || b.N == topic.PN
 		}
 
 	case *ExtTopic:
-		if VEqual(b.X, topic.C.X) {
+		if ValueEqual(b.X, topic.C.X) {
 			return b.N >= topic.C.N
 		}
 	}
@@ -107,7 +107,7 @@ func (e *Msg) votesOrAcceptsCommit(v Value, min, max int) (bool, int, int) {
 	}
 	switch topic := e.T.(type) {
 	case *PrepTopic:
-		if topic.CN == 0 || !VEqual(topic.B.X, v) {
+		if topic.CN == 0 || !ValueEqual(topic.B.X, v) {
 			return false, 0, 0
 		}
 		if topic.CN > max || topic.HN < min {
@@ -122,7 +122,7 @@ func (e *Msg) votesOrAcceptsCommit(v Value, min, max int) (bool, int, int) {
 		return true, min, max
 
 	case *CommitTopic:
-		if !VEqual(topic.B.X, v) {
+		if !ValueEqual(topic.B.X, v) {
 			return false, 0, 0
 		}
 		if topic.CN > max {
@@ -143,7 +143,7 @@ func (e *Msg) votesOrAcceptsCommit(v Value, min, max int) (bool, int, int) {
 func (e *Msg) acceptsCommit(v Value, min, max int) (bool, int, int) {
 	switch topic := e.T.(type) {
 	case *CommitTopic:
-		if !VEqual(topic.B.X, v) {
+		if !ValueEqual(topic.B.X, v) {
 			return false, 0, 0
 		}
 		if topic.CN > max {
@@ -161,7 +161,7 @@ func (e *Msg) acceptsCommit(v Value, min, max int) (bool, int, int) {
 		return true, min, max
 
 	case *ExtTopic:
-		if !VEqual(topic.C.X, v) {
+		if !ValueEqual(topic.C.X, v) {
 			return false, 0, 0
 		}
 		if topic.C.N > max {

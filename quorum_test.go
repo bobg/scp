@@ -52,7 +52,7 @@ func TestFindBlockingSet(t *testing.T) {
 			got := slot.findBlockingSet(fpred(func(msg *Msg) bool {
 				return strings.Contains(string(msg.V), "z")
 			}))
-			want := toNodeSet(tc.want)
+			want := toNodeIDSet(tc.want)
 			if !reflect.DeepEqual(got, want) {
 				t.Errorf("got %v, want %v", got, want)
 			}
@@ -61,8 +61,8 @@ func TestFindBlockingSet(t *testing.T) {
 }
 
 // input: "b(a c / d e) c(a b) d(e) e(d)"
-// output: map[NodeID][]NodeSet{"b": {{"a", "c"}, {"d", "e"}}, "c": {{"a", "b"}}, "d": {{"e"}}, "e": {{"d"}}}
-func toNetwork(s string) map[NodeID][]NodeSet {
+// output: map[NodeID][]NodeIDSet{"b": {{"a", "c"}, {"d", "e"}}, "c": {{"a", "b"}}, "d": {{"e"}}, "e": {{"d"}}}
+func toNetwork(s string) map[NodeID][]NodeIDSet {
 	splitFunc := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		for len(data) > 0 && unicode.IsSpace(rune(data[0])) {
 			data = data[1:]
@@ -94,11 +94,11 @@ func toNetwork(s string) map[NodeID][]NodeSet {
 
 	var (
 		nodeID   NodeID
-		nodeSet  NodeSet
+		nodeSet  NodeIDSet
 		inParen  bool
-		nodeSets []NodeSet
+		nodeSets []NodeIDSet
 	)
-	result := make(map[NodeID][]NodeSet)
+	result := make(map[NodeID][]NodeIDSet)
 
 	for scanner.Scan() {
 		tok := scanner.Text()

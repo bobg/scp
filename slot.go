@@ -139,7 +139,7 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 				s.PP = ZeroBallot
 				for i := len(s.AP) - 2; i >= 0; i-- {
 					ap := s.AP[i]
-					if ap.N < s.P.N && !VEqual(ap.X, s.P.X) {
+					if ap.N < s.P.N && !ValueEqual(ap.X, s.P.X) {
 						s.PP = ap
 						break
 					}
@@ -180,7 +180,7 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 
 			// Update s.C.
 			if !s.C.IsZero() {
-				if (s.C.Less(s.P) && !VEqual(s.P.X, s.C.X)) || (s.C.Less(s.PP) && !VEqual(s.PP.X, s.C.X)) {
+				if (s.C.Less(s.P) && !ValueEqual(s.P.X, s.C.X)) || (s.C.Less(s.PP) && !ValueEqual(s.PP.X, s.C.X)) {
 					s.C = ZeroBallot
 				}
 			}

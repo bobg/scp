@@ -32,15 +32,15 @@ func TestPeers(t *testing.T) {
 	}
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%02d", i+1), func(t *testing.T) {
-			var q []NodeSet
+			var q []NodeIDSet
 			for _, slice := range tc.slices {
-				ns := toNodeSet(slice)
+				ns := toNodeIDSet(slice)
 				q = append(q, ns)
 			}
 			n := NewNode("x", q)
 			got := n.Peers()
-			want := toNodeSet(tc.want)
-			if !reflect.DeepEqual(got, NodeSet(want)) {
+			want := toNodeIDSet(tc.want)
+			if !reflect.DeepEqual(got, NodeIDSet(want)) {
 				t.Errorf("got %v, want %v", got, want)
 			}
 		})
@@ -71,9 +71,9 @@ func TestWeight(t *testing.T) {
 	}
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%02d", i+1), func(t *testing.T) {
-			var q []NodeSet
+			var q []NodeIDSet
 			for _, slice := range tc.slices {
-				ns := toNodeSet(slice)
+				ns := toNodeIDSet(slice)
 				q = append(q, ns)
 			}
 			n := NewNode("x", q)
@@ -89,8 +89,8 @@ func TestWeight(t *testing.T) {
 	}
 }
 
-func toNodeSet(s string) NodeSet {
-	var result NodeSet
+func toNodeIDSet(s string) NodeIDSet {
+	var result NodeIDSet
 	fields := strings.Fields(s)
 	for _, f := range fields {
 		result = result.Add(NodeID(f))

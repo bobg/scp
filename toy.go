@@ -64,9 +64,9 @@ func main() {
 	for _, arg := range flag.Args() {
 		parts := strings.SplitN(arg, ":", 2)
 		nodeID := scp.NodeID(parts[0])
-		var q []scp.NodeSet
+		var q []scp.NodeIDSet
 		for _, slices := range strings.Split(parts[1], "/") {
-			var qslice scp.NodeSet
+			var qslice scp.NodeIDSet
 			for _, field := range strings.Fields(slices) {
 				if field == string(nodeID) {
 					log.Print("skipping quorum slice member %s for node %s", field, nodeID)
