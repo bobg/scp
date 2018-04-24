@@ -78,27 +78,30 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 
 	switch s.Ph { // note, s.Ph == PhExt should never be true
 	case PhNom:
-		if ok, err := s.maxPrioritySender(msg.V); err != nil || !ok {
+		ok, err := s.maxPrioritySender(msg.V)
+		if err != nil {
 			return nil, err
 		}
 
-		// "Echo" nominated values by adding them to s.X.
-		switch topic := msg.T.(type) {
-		case *NomTopic:
-			s.X = s.X.Union(topic.X)
-			s.X = s.X.Union(topic.Y)
-		case *PrepTopic:
-			s.X = s.X.Add(topic.B.X)
-			if !topic.P.IsZero() {
-				s.X = s.X.Add(topic.P.X)
+		if ok {
+			// "Echo" nominated values by adding them to s.X.
+			switch topic := msg.T.(type) {
+			case *NomTopic:
+				s.X = s.X.Union(topic.X)
+				s.X = s.X.Union(topic.Y)
+			case *PrepTopic:
+				s.X = s.X.Add(topic.B.X)
+				if !topic.P.IsZero() {
+					s.X = s.X.Add(topic.P.X)
+				}
+				if !topic.PP.IsZero() {
+					s.X = s.X.Add(topic.PP.X)
+				}
+			case *CommitTopic:
+				s.X = s.X.Add(topic.B.X)
+			case *ExtTopic:
+				s.X = s.X.Add(topic.C.X)
 			}
-			if !topic.PP.IsZero() {
-				s.X = s.X.Add(topic.PP.X)
-			}
-		case *CommitTopic:
-			s.X = s.X.Add(topic.B.X)
-		case *ExtTopic:
-			s.X = s.X.Add(topic.C.X)
 		}
 
 		// Promote accepted-nominated values from X to Y, and
@@ -381,21 +384,42 @@ func (s *Slot) updateYZ() {
 			promote = promote.Add(val)
 		}
 	}
-	for _, val := range promote {
-		s.X = s.X.Remove(val)
-		s.Y = s.Y.Add(val)
-	}
+	s.X = s.X.Minus(promote)
+	s.Y = s.Y.Union(promote)
 
 	// Look for values in s.Y to confirm, moving slot to the PREPARE
 	// phase.
-	for _, val := range s.Y {
-		nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
-			return msg.acceptsNominated(val)
-		}))
-		if len(nodeIDs) > 0 {
-			s.Z = s.Z.Add(val)
-		}
+	var acceptedNominated ValueSet
+	pred := &valueSetPred{
+		vals:      s.Y,
+		finalVals: &acceptedNominated,
+		testfn: func(msg *Msg, vals ValueSet) ValueSet {
+			switch topic := msg.T.(type) {
+			case *NomTopic:
+				return vals.Intersection(topic.Y)
+
+			case *PrepTopic:
+				var s ValueSet
+				s = s.Add(topic.B.X)
+				if !topic.P.IsZero() {
+					s = s.Add(topic.P.X)
+				}
+				if !topic.PP.IsZero() {
+					s = s.Add(topic.PP.X)
+				}
+				return vals.Intersection(s)
+
+			case *CommitTopic:
+				return vals.Intersection(ValueSet{topic.B.X})
+
+			case *ExtTopic:
+				return vals.Intersection(ValueSet{topic.C.X})
+			}
+			return nil // not reached
+		},
 	}
+	s.findQuorum(pred)
+	s.Z = s.Z.Union(acceptedNominated)
 }
 
 // Update s.AP - the set of accepted-prepared ballots.

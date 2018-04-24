@@ -98,6 +98,54 @@ func (vs ValueSet) Union(other ValueSet) ValueSet {
 	return result
 }
 
+// Intersection produces a ValueSet with only the elements in both
+// sets.
+func (vs ValueSet) Intersection(other ValueSet) ValueSet {
+	if len(vs) == 0 || len(other) == 0 {
+		return nil
+	}
+	var result ValueSet
+	for i, j := 0, 0; i < len(vs) && j < len(other); {
+		switch {
+		case vs[i].Less(other[j]):
+			i++
+		case other[j].Less(vs[i]):
+			j++
+		default:
+			result = append(result, vs[i])
+			i++
+			j++
+		}
+	}
+	return result
+}
+
+// Minus produces a ValueSet with only the members of vs that don't
+// appear in other.
+func (vs ValueSet) Minus(other ValueSet) ValueSet {
+	if len(vs) == 0 || len(other) == 0 {
+		return vs
+	}
+	var (
+		result ValueSet
+		i, j   int
+	)
+	for i < len(vs) && j < len(other) {
+		switch {
+		case vs[i].Less(other[j]):
+			result = append(result, vs[i])
+			i++
+		case other[j].Less(vs[i]):
+			j++
+		default:
+			i++
+			j++
+		}
+	}
+	result = append(result, vs[i:]...)
+	return result
+}
+
 // Remove produces a ValueSet without the specified element.
 func (vs ValueSet) Remove(v Value) ValueSet {
 	index := vs.find(v)

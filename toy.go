@@ -11,6 +11,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"flag"
 	"log"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"github.com/bobg/scp"
+	"golang.org/x/time/rate"
 )
 
 type entry struct {
@@ -103,6 +105,7 @@ const (
 
 // runs as a goroutine
 func nodefn(n *scp.Node, recv <-chan *scp.Msg, send chan<- *scp.Msg, highestSlot *int32) {
+	limiter := rate.NewLimiter(10, 10)
 	for {
 		// Some time in the next minNomDelayMS to maxNomDelayMS
 		// milliseconds.
@@ -114,6 +117,8 @@ func nodefn(n *scp.Node, recv <-chan *scp.Msg, send chan<- *scp.Msg, highestSlot
 			if !timer.Stop() {
 				<-timer.C
 			}
+
+			limiter.Wait(context.Background())
 
 			res, err := n.Handle(msg)
 			if err != nil {

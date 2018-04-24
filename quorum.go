@@ -144,6 +144,34 @@ func (f fpred) next() predicate {
 	return f
 }
 
+// This is a predicate that can narrow a set of values as it traverses
+// nodes.
+type valueSetPred struct {
+	vals      ValueSet
+	nextVals  ValueSet
+	finalVals *ValueSet
+	testfn    func(*Msg, ValueSet) ValueSet
+}
+
+func (p *valueSetPred) test(msg *Msg) bool {
+	if len(p.vals) == 0 {
+		return false
+	}
+	p.nextVals = p.testfn(msg, p.vals)
+	return len(p.nextVals) > 0
+}
+
+func (p *valueSetPred) next() predicate {
+	if p.finalVals != nil {
+		*p.finalVals = p.nextVals
+	}
+	return &valueSetPred{
+		vals:      p.nextVals,
+		finalVals: p.finalVals,
+		testfn:    p.testfn,
+	}
+}
+
 // This is a predicate that can narrow a set of min/max bounds as it
 // traverses nodes.
 type minMaxPred struct {
