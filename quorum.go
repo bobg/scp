@@ -34,7 +34,8 @@ func (s *Slot) findBlockingSetOrQuorum(pred predicate) NodeSet {
 	return s.findQuorum(pred)
 }
 
-// Checks that at least one node in each quorum slice satisfies pred.
+// Checks that at least one node in each quorum slice satisfies pred
+// (excluding the slot's node).
 func (s *Slot) findBlockingSet(pred predicate) NodeSet {
 	var result NodeSet
 	for _, slice := range s.V.Q {
