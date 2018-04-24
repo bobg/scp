@@ -28,31 +28,39 @@ func NewMsg(v NodeID, i SlotID, q []NodeIDSet, t Topic) *Msg {
 	}
 }
 
-// Tells whether e votes nominate(v) or accepts nominate(v).
-func (e *Msg) votesOrAcceptsNominated(v Value) bool {
-	if e.acceptsNominated(v) {
-		return true
+// Returns the set of values that e votes or accepts as nominated.
+func (e *Msg) votesOrAcceptsNominatedSet() ValueSet {
+	result := e.acceptsNominatedSet()
+	if topic, ok := e.T.(*NomTopic); ok {
+		result = result.Union(topic.X)
 	}
-	topic, ok := e.T.(*NomTopic)
-	return ok && topic.X.Contains(v)
+	return result
 }
 
-// Tells whether e accepts nominate(v).
-func (e *Msg) acceptsNominated(v Value) bool {
+// Returns the set of values that e accepts as nominated.
+func (e *Msg) acceptsNominatedSet() ValueSet {
 	switch topic := e.T.(type) {
 	case *NomTopic:
-		return topic.Y.Contains(v)
+		return topic.Y
 
 	case *PrepTopic:
-		return ValueEqual(topic.B.X, v) || ValueEqual(topic.P.X, v) || ValueEqual(topic.PP.X, v)
+		var s ValueSet
+		s = s.Add(topic.B.X)
+		if !topic.P.IsZero() {
+			s = s.Add(topic.P.X)
+		}
+		if !topic.PP.IsZero() {
+			s = s.Add(topic.PP.X)
+		}
+		return s
 
 	case *CommitTopic:
-		return ValueEqual(topic.B.X, v)
+		return ValueSet{topic.B.X}
 
 	case *ExtTopic:
-		return ValueEqual(topic.C.X, v)
+		return ValueSet{topic.C.X}
 	}
-	return false // not reached
+	return nil // not reached
 }
 
 // Tells whether e votes prepared(b) or accepts prepared(b).
