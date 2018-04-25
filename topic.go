@@ -6,7 +6,6 @@ import "fmt"
 // (conveyed in an envelope, see type Msg). The concrete type is one
 // of NomTopic, PrepTopic, CommitTopic, and ExtTopic.
 type Topic interface {
-	BN() int // returns ballot.counter in PREPARE and COMMIT messages
 	Less(Topic) bool
 	String() string
 }
@@ -15,8 +14,6 @@ type Topic interface {
 type NomTopic struct {
 	X, Y ValueSet
 }
-
-func (nt *NomTopic) BN() int { return 0 }
 
 func (nt *NomTopic) Less(other Topic) bool {
 	o, ok := other.(*NomTopic)
@@ -35,8 +32,6 @@ type PrepTopic struct {
 	B, P, PP Ballot
 	HN, CN   int
 }
-
-func (pt *PrepTopic) BN() int { return pt.B.N }
 
 func (pt *PrepTopic) Less(other Topic) bool {
 	switch other := other.(type) {
@@ -77,8 +72,6 @@ type CommitTopic struct {
 	PN, HN, CN int
 }
 
-func (ct *CommitTopic) BN() int { return ct.B.N }
-
 func (ct *CommitTopic) Less(other Topic) bool {
 	switch other := other.(type) {
 	case *NomTopic:
@@ -113,8 +106,6 @@ type ExtTopic struct {
 	C  Ballot
 	HN int
 }
-
-func (et *ExtTopic) BN() int { return 0 }
 
 func (et *ExtTopic) Less(other Topic) bool {
 	if other, ok := other.(*ExtTopic); ok {

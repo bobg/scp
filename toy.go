@@ -101,21 +101,24 @@ func main() {
 					continue
 				}
 				n := entries[msg.V].node
-				if msgs[msg.V] == nil {
-					n.Logf("%s", msg)
-				} else {
-					switch msgs[msg.V].T.(type) {
-					case *scp.NomTopic:
-						if _, ok := msg.T.(*scp.PrepTopic); ok {
-							n.Logf("%s", msg)
-						}
-					case *scp.PrepTopic:
-						if _, ok := msg.T.(*scp.CommitTopic); ok {
-							n.Logf("%s", msg)
-						}
-					case *scp.CommitTopic:
-						if _, ok := msg.T.(*scp.ExtTopic); ok {
-							n.Logf("%s", msg)
+
+				if true { // xxx
+					if msgs[msg.V] == nil {
+						n.Logf("%s", msg)
+					} else {
+						switch msgs[msg.V].T.(type) {
+						case *scp.NomTopic:
+							if _, ok := msg.T.(*scp.PrepTopic); ok {
+								n.Logf("%s", msg)
+							}
+						case *scp.PrepTopic:
+							if _, ok := msg.T.(*scp.CommitTopic); ok {
+								n.Logf("%s", msg)
+							}
+						case *scp.CommitTopic:
+							if _, ok := msg.T.(*scp.ExtTopic); ok {
+								n.Logf("%s", msg)
+							}
 						}
 					}
 				}

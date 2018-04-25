@@ -71,16 +71,13 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 	var renom bool
 	if have, ok := s.M[msg.V]; ok && !have.T.Less(msg.T) {
 		// We already have a message from this sender that's the same or
-		// newer.
-		if s.Ph != PhNom {
-			return nil, nil
-		}
-		// Reconsider old messages during the nomination phase, since time
-		// elapsing can change how we handle them.
-		renom = true
+		// newer; use that instead.
+		msg = have
+		renom = s.Ph == PhNom
 	} else {
 		s.M[msg.V] = msg
 	}
+	s.Logf("* handling %s", msg)
 
 	switch s.Ph { // note, s.Ph == PhExt should never be true
 	case PhNom:
@@ -184,54 +181,7 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 				s.H = s.CP[len(s.CP)-1]
 			}
 
-			// Update s.B.
-			if s.B.Less(s.H) {
-				// raise B to the highest confirmed-prepared ballot
-				s.B = s.H
-				s.cancelUpd()
-			} else {
-				// When a node sees sees messages from a quorum to which it
-				// belongs such that each message's "ballot.counter" is
-				// greater than or equal to the local "ballot.counter", the
-				// node arms a timer for its local "ballot.counter + 1"
-				// seconds.
-				if s.Upd == nil { // don't bother if a timer's already armed
-					nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
-						return msg.T.BN() >= s.B.N
-					}))
-					if len(nodeIDs) > 0 {
-						s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(DeferredUpdateInterval)), s.deferredUpdate)
-					}
-				}
-
-				// If nodes forming a blocking threshold all have
-				// "ballot.counter" values greater than the local
-				// "ballot.counter", then the local node immediately increases
-				// "ballot.counter" to the lowest value such that this is no
-				// longer the case.  (When doing so, it also disables any
-				// pending timers associated with the old "counter".)
-				var doSetBX bool
-				for {
-					nodeIDs := s.findBlockingSet(fpred(func(msg *Msg) bool {
-						return msg.T.BN() > s.B.N
-					}))
-					if len(nodeIDs) == 0 {
-						break
-					}
-					doSetBX = true
-					s.cancelUpd()
-					for i, nodeID := range nodeIDs {
-						msg := s.M[nodeID]
-						bn := msg.T.BN()
-						if i == 0 || bn < s.B.N {
-							s.B.N = bn
-						}
-					}
-				}
-				if doSetBX {
-					s.setBX()
-				}
-			}
+			s.updateB()
 
 			// Update s.C.
 			if !s.C.IsZero() {
@@ -290,6 +240,8 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 			s.H.N = acmax
 		}
 
+		s.updateB()
+
 		// As soon as a node confirms "commit b" for any ballot "b", it
 		// moves to the EXTERNALIZE stage.
 		var cn, hn int
@@ -307,6 +259,7 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 			s.Ph = PhExt // \o/
 			s.C.N = cn
 			s.H.N = hn
+			s.cancelUpd()
 		}
 	}
 
@@ -379,6 +332,57 @@ func (s *Slot) cancelUpd() {
 		<-s.Upd.C
 	}
 	s.Upd = nil
+}
+
+func (s *Slot) updateB() {
+	// Update s.B.
+	if s.B.Less(s.H) {
+		// raise B to the highest confirmed-prepared ballot
+		s.B = s.H
+		s.cancelUpd()
+	} else {
+		// When a node sees sees messages from a quorum to which it
+		// belongs such that each message's "ballot.counter" is
+		// greater than or equal to the local "ballot.counter", the
+		// node arms a timer for its local "ballot.counter + 1"
+		// seconds.
+		if s.Upd == nil { // don't bother if a timer's already armed
+			nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
+				return msg.bN() >= s.B.N
+			}))
+			if len(nodeIDs) > 0 {
+				s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(DeferredUpdateInterval)), s.deferredUpdate)
+			}
+		}
+
+		// If nodes forming a blocking threshold all have
+		// "ballot.counter" values greater than the local
+		// "ballot.counter", then the local node immediately increases
+		// "ballot.counter" to the lowest value such that this is no
+		// longer the case.  (When doing so, it also disables any
+		// pending timers associated with the old "counter".)
+		var doSetBX bool
+		for {
+			nodeIDs := s.findBlockingSet(fpred(func(msg *Msg) bool {
+				return msg.bN() > s.B.N
+			}))
+			if len(nodeIDs) == 0 {
+				break
+			}
+			doSetBX = true
+			s.cancelUpd()
+			for i, nodeID := range nodeIDs {
+				msg := s.M[nodeID]
+				bn := msg.bN()
+				if i == 0 || bn < s.B.N {
+					s.B.N = bn
+				}
+			}
+		}
+		if doSetBX {
+			s.setBX()
+		}
+	}
 }
 
 func (s *Slot) setBX() {

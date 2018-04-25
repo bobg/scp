@@ -28,6 +28,18 @@ func NewMsg(v NodeID, i SlotID, q []NodeIDSet, t Topic) *Msg {
 	}
 }
 
+// Return the ballot counter (if any).
+func (e *Msg) bN() int {
+	switch topic := e.T.(type) {
+	case *PrepTopic:
+		return topic.B.N
+
+	case *CommitTopic:
+		return topic.B.N
+	}
+	return 0
+}
+
 // Returns the set of values that e votes or accepts as nominated.
 func (e *Msg) votesOrAcceptsNominatedSet() ValueSet {
 	result := e.acceptsNominatedSet()
