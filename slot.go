@@ -318,9 +318,6 @@ func (s *Slot) Msg() *Msg {
 }
 
 func (s *Slot) deferredUpdate() {
-	s.V.mu.Lock() // xxx maybe this needs to be a Node method
-	defer s.V.mu.Unlock()
-
 	if s.Upd == nil {
 		return
 	}
@@ -331,7 +328,7 @@ func (s *Slot) deferredUpdate() {
 
 	s.Logf("deferred update, B is now %s", s.B)
 
-	s.V.ch <- s.Msg()
+	s.V.send <- s.Msg()
 }
 
 func (s *Slot) cancelUpd() {

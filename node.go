@@ -7,7 +7,6 @@ import (
 	"errors"
 	"log"
 	"math/big"
-	"sync"
 
 	"github.com/davecgh/go-xdr/xdr"
 )
@@ -25,16 +24,15 @@ type Node struct {
 	// every slice.
 	Q []NodeIDSet
 
-	// Pending holds Slot objects during nomination and balloting.
-	Pending map[SlotID]*Slot
+	// pending holds Slot objects during nomination and balloting.
+	pending map[SlotID]*Slot
 
-	// Ext holds externalized values for slots that have completed
+	// ext holds externalized values for slots that have completed
 	// balloting.
-	Ext map[SlotID]*ExtTopic
+	ext map[SlotID]*ExtTopic
 
-	ch chan<- *Msg
-
-	mu sync.Mutex
+	recv chan Cmd
+	send chan<- *Msg
 }
 
 // NewNode produces a new node.
@@ -42,10 +40,34 @@ func NewNode(id NodeID, q []NodeIDSet, ch chan<- *Msg) *Node {
 	return &Node{
 		ID:      id,
 		Q:       q,
-		Pending: make(map[SlotID]*Slot),
-		Ext:     make(map[SlotID]*ExtTopic),
-		ch:      ch,
+		pending: make(map[SlotID]*Slot),
+		ext:     make(map[SlotID]*ExtTopic),
+		recv:    make(chan Cmd, 100),
+		send:    ch,
 	}
+}
+
+// Go processes incoming events for the node. It never returns and
+// should be launched as a goroutine.
+func (n *Node) Run() {
+	go func() {
+		for cmd := range n.recv {
+			switch cmd := cmd.(type) {
+			case *msgCmd:
+				err := n.handle(cmd.msg)
+				if err != nil {
+					n.Logf("%s", err)
+				}
+
+			case *deferredUpdateCmd:
+				s := n.pending[cmd.slotID]
+				if s == nil {
+					continue
+				}
+				s.deferredUpdate()
+			}
+		}
+	}()
 }
 
 // Handle processes an incoming protocol message. It sends a protocol
@@ -53,29 +75,26 @@ func NewNode(id NodeID, q []NodeIDSet, ch chan<- *Msg) *Node {
 // ignored. (A message is ignored if it's invalid, redundant, or older
 // than another message already received from the same sender.)
 // TODO: add validity checks
-func (n *Node) Handle(msg *Msg) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-
-	return n.handle(msg)
+func (n *Node) Handle(msg *Msg) {
+	n.recv <- &msgCmd{msg: msg}
 }
 
 func (n *Node) handle(msg *Msg) error {
-	if topic, ok := n.Ext[msg.I]; ok {
+	if topic, ok := n.ext[msg.I]; ok {
 		// This node has already externalized a value for the given slot.
 		// Send an EXTERNALIZE message outbound, unless the inbound
 		// message is also EXTERNALIZE.
 		// TODO: ...in which case double-check that the values agree?
 		if _, ok = msg.T.(*ExtTopic); !ok {
-			n.ch <- NewMsg(n.ID, msg.I, n.Q, topic)
+			n.send <- NewMsg(n.ID, msg.I, n.Q, topic)
 		}
 		return nil
 	}
 
-	s, ok := n.Pending[msg.I]
+	s, ok := n.pending[msg.I]
 	if !ok {
 		s = newSlot(msg.I, n)
-		n.Pending[msg.I] = s
+		n.pending[msg.I] = s
 	}
 
 	outbound, err := s.Handle(msg)
@@ -91,21 +110,22 @@ func (n *Node) handle(msg *Msg) error {
 		// Handling the inbound message resulted in externalizing a value.
 		// We can now save the EXTERNALIZE message and get rid of the Slot
 		// object.
-		n.Ext[msg.I] = extTopic
-		delete(n.Pending, msg.I)
+		n.ext[msg.I] = extTopic
+		delete(n.pending, msg.I)
 	}
 
-	n.ch <- outbound
+	n.send <- outbound
 	return nil
 }
 
 // Ping causes n to re-Handle the latest message from each sender in
 // all pending slots.
-func (n *Node) Ping() error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
+func (n *Node) Ping() {
+	n.recv <- &pingCmd{}
+}
 
-	for _, s := range n.Pending {
+func (n *Node) ping() error {
+	for _, s := range n.pending {
 		for _, msg := range s.M {
 			err := n.handle(msg)
 			if err != nil {
@@ -128,7 +148,7 @@ func (n *Node) G(i SlotID, m []byte) (result [32]byte, err error) {
 
 	var prevValBytes []byte
 	if i > 1 {
-		topic, ok := n.Ext[i-1]
+		topic, ok := n.ext[i-1]
 		if !ok {
 			return result, ErrNoPrev
 		}

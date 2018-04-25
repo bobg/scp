@@ -21,11 +21,6 @@ import (
 	"github.com/bobg/scp"
 )
 
-type entry struct {
-	node *scp.Node
-	ch   chan *scp.Msg
-}
-
 type valType string
 
 func (v valType) Less(other scp.Value) bool {
@@ -54,7 +49,7 @@ func main() {
 	flag.Parse()
 	rand.Seed(*seed)
 
-	entries := make(map[scp.NodeID]entry)
+	nodes := make(map[scp.NodeID]*scp.Node)
 
 	ch := make(chan *scp.Msg, 10000)
 	for _, arg := range flag.Args() {
@@ -73,17 +68,20 @@ func main() {
 			q = append(q, qslice)
 		}
 		node := scp.NewNode(nodeID, q, ch)
-		nodeCh := make(chan *scp.Msg, 1000)
-		entries[nodeID] = entry{node: node, ch: nodeCh}
-		go nodefn(node, nodeCh)
+		nodes[nodeID] = node
+		go node.Run()
 	}
 
 	for slotID := scp.SlotID(1); ; slotID++ {
 		msgs := make(map[scp.NodeID]*scp.Msg) // holds the latest message seen from each node
 
-		for _, e := range entries {
-			e.ch <- nil // a nil message means "start a new slot"
-			msgs[e.node.ID] = nil
+		for _, node := range nodes {
+			msgs[node.ID] = nil
+
+			// New slot! Nominate something.
+			val := foods[rand.Intn(len(foods))]
+			nomMsg := scp.NewMsg(node.ID, slotID, node.Q, &scp.NomTopic{X: scp.ValueSet{val}})
+			node.Handle(nomMsg)
 		}
 
 		for looping := true; looping; {
@@ -100,7 +98,7 @@ func main() {
 					// discard messages about old slots
 					continue
 				}
-				n := entries[msg.V].node
+				n := nodes[msg.V]
 
 				if true { // xxx
 					if msgs[msg.V] == nil {
@@ -141,43 +139,19 @@ func main() {
 				}
 
 				// Send this message to every other node.
-				for nodeID, e := range entries {
-					if nodeID == msg.V {
+				for otherNodeID, otherNode := range nodes {
+					if otherNodeID == msg.V {
 						continue
 					}
-					e.ch <- msg
+					otherNode.Handle(msg)
 				}
 
 			case <-timer.C:
 				// It's too quiet around here.
-				for _, e := range entries {
-					e.node.Ping()
+				for _, node := range nodes {
+					node.Ping()
 				}
 			}
-		}
-	}
-}
-
-// runs as a goroutine
-func nodefn(n *scp.Node, recv <-chan *scp.Msg) {
-	for msg := range recv {
-		if msg == nil {
-			// New round, try to nominate something.
-			var slotID scp.SlotID
-			for i := range n.Ext {
-				if i > slotID {
-					slotID = i
-				}
-			}
-			slotID++
-			val := foods[rand.Intn(len(foods))]
-			msg = scp.NewMsg(n.ID, slotID, n.Q, &scp.NomTopic{X: scp.ValueSet{val}})
-		}
-
-		err := n.Handle(msg)
-		if err != nil {
-			n.Logf("could not handle %s: %s", msg, err)
-			continue
 		}
 	}
 }
