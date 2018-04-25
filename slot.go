@@ -81,9 +81,9 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 				resp = nil
 			} else {
 				s.sent = resp.T
+				s.Logf("* handling %s -> %s", msg, resp)
 			}
 		}
-		s.Logf("* handling %s -> %s", msg, resp)
 	}()
 
 	var renom bool
