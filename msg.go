@@ -1,6 +1,7 @@
 package scp
 
 import (
+	"errors"
 	"fmt"
 	"sync/atomic"
 )
@@ -26,6 +27,37 @@ func NewMsg(v NodeID, i SlotID, q []NodeIDSet, t Topic) *Msg {
 		Q: q,
 		T: t,
 	}
+}
+
+func (e *Msg) valid() error {
+	switch topic := e.T.(type) {
+	case *NomTopic:
+		if len(topic.X.Intersection(topic.Y)) != 0 {
+			return errors.New("non-empty intersection between X and Y")
+		}
+
+	case *PrepTopic:
+		if !topic.P.IsZero() {
+			if topic.B.Less(topic.P) {
+				return errors.New("P > B")
+			}
+			if !topic.PP.IsZero() && !topic.PP.Less(topic.P) {
+				return errors.New("PP >= P")
+			}
+		}
+		if topic.CN > topic.HN {
+			return errors.New("CN > HN (prepare)")
+		}
+		if topic.HN > topic.B.N {
+			return errors.New("HN > BN")
+		}
+
+	case *CommitTopic:
+		if topic.CN > topic.HN {
+			return errors.New("CN > HN (commit)")
+		}
+	}
+	return nil
 }
 
 // Return the ballot counter (if any).

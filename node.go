@@ -56,7 +56,7 @@ func (n *Node) Run() {
 			case *msgCmd:
 				err := n.handle(cmd.msg)
 				if err != nil {
-					n.Logf("%s", err)
+					n.Logf("ERROR %s", err)
 				}
 
 			case *deferredUpdateCmd:
@@ -69,18 +69,18 @@ func (n *Node) Run() {
 			case *pingCmd:
 				err := n.ping()
 				if err != nil {
-					n.Logf("%s", err)
+					n.Logf("ERROR %s", err)
 				}
 			}
 		}
 	}()
 }
 
-// handle processes an incoming protocol message. It sends a protocol
-// message in response on n.ch unless the incoming message is
-// ignored. (A message is ignored if it's invalid, redundant, or older
-// than another message already received from the same sender.)
-// TODO: add validity checks
+// Handle queues an incoming protocol message. When processed it will
+// send a protocol message in response on n.send unless the incoming
+// message is ignored. (A message is ignored if it's invalid,
+// redundant, or older than another message already received from the
+// same sender.)
 func (n *Node) Handle(msg *Msg) {
 	n.recv <- &msgCmd{msg: msg}
 }

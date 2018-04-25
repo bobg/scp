@@ -71,6 +71,11 @@ var (
 // protocol message in response, or nil if the incoming message is
 // ignored.
 func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
+	err = msg.valid()
+	if err != nil {
+		return nil, err
+	}
+
 	defer func() {
 		if err == nil && resp != nil {
 			if oldTopic := s.resps[msg.V]; reflect.DeepEqual(resp.T, oldTopic) {
@@ -91,7 +96,6 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 	} else {
 		s.M[msg.V] = msg
 	}
-	// s.Logf("* handling %s", msg)
 
 	switch s.Ph { // note, s.Ph == PhExt should never be true
 	case PhNom:

@@ -119,6 +119,8 @@ func main() {
 							}
 						}
 					}
+				} else {
+					n.Logf("%s", msg)
 				}
 				msgs[msg.V] = msg
 
