@@ -113,6 +113,19 @@ func (s *Slot) findSliceQuorum(slice NodeIDSet, pred predicate, known NodeIDSet)
 	return known, pred
 }
 
+// Tells whether a statement can be accepted, either because a
+// blocking set accepts, or because a quorum votes-or-accepts it. The
+// function f should produce an "accepts" predicate when its argument
+// is false and a "votes-or-accepts" predicate when its argument is
+// true.
+func (s *Slot) accept(f func(bool) predicate) NodeIDSet {
+	nodeIDs := s.findBlockingSet(f(false))
+	if len(nodeIDs) > 0 {
+		return nodeIDs
+	}
+	return s.findQuorum(f(true))
+}
+
 // Abstract predicate. Concrete types below.
 type predicate interface {
 	test(*Msg) bool

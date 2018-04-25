@@ -208,27 +208,21 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 			// ballot "b".
 			if !s.C.IsZero() && !s.H.IsZero() {
 				var cn, hn int
-				pred := &minMaxPred{
-					min:      s.C.N,
-					max:      s.H.N,
-					finalMin: &cn,
-					finalMax: &hn,
-					testfn: func(msg *Msg, min, max int) (bool, int, int) {
-						return msg.votesOrAcceptsCommit(s.B.X, min, max)
-					},
-				}
-				nodeIDs := s.findBlockingSet(pred)
-				if len(nodeIDs) == 0 {
-					pred = &minMaxPred{
+				nodeIDs := s.accept(func(isQuorum bool) predicate {
+					return &minMaxPred{
 						min:      s.C.N,
 						max:      s.H.N,
 						finalMin: &cn,
 						finalMax: &hn,
 						testfn: func(msg *Msg, min, max int) (bool, int, int) {
-							return msg.acceptsCommit(s.B.X, min, max)
+							rangeFn := msg.acceptsCommit
+							if isQuorum {
+								rangeFn = msg.votesOrAcceptsCommit
+							}
+							return rangeFn(s.B.X, min, max)
 						},
 					}
-				}
+				})
 				if len(nodeIDs) > 0 {
 					// Accept commit(<n, s.B.X>).
 					s.Ph = PhCommit
@@ -244,28 +238,21 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 
 		// Update the accepted-commit bounds.
 		var acmin, acmax int
-		acpred := &minMaxPred{
-			min:      s.C.N,
-			max:      math.MaxInt32,
-			finalMin: &acmin,
-			finalMax: &acmax,
-			testfn: func(msg *Msg, min, max int) (bool, int, int) {
-				return msg.acceptsCommit(s.B.X, min, max)
-			},
-		}
-		nodeIDs := s.findBlockingSet(acpred)
-		if len(nodeIDs) == 0 {
-			acpred = &minMaxPred{
+		nodeIDs := s.accept(func(isQuorum bool) predicate {
+			return &minMaxPred{
 				min:      s.C.N,
 				max:      math.MaxInt32,
 				finalMin: &acmin,
 				finalMax: &acmax,
 				testfn: func(msg *Msg, min, max int) (bool, int, int) {
-					return msg.votesOrAcceptsCommit(s.B.X, min, max)
+					rangeFn := msg.acceptsCommit
+					if isQuorum {
+						rangeFn = msg.votesOrAcceptsCommit
+					}
+					return rangeFn(s.B.X, min, max)
 				},
 			}
-			nodeIDs = s.findQuorum(acpred)
-		}
+		})
 		if len(nodeIDs) > 0 {
 			s.C.N = acmin
 			s.H.N = acmax
@@ -466,24 +453,20 @@ func (s *Slot) maxPrioritySender(nodeID NodeID) (bool, error) {
 func (s *Slot) updateYZ() {
 	// Look for values to promote from s.X to s.Y.
 	var promote ValueSet
-	pred := &valueSetPred{
-		vals:      s.X,
-		finalVals: &promote,
-		testfn: func(msg *Msg, vals ValueSet) ValueSet {
-			return vals.Intersection(msg.acceptsNominatedSet())
-		},
-	}
-	nodeIDs := s.findBlockingSet(pred)
-	if len(nodeIDs) == 0 {
-		pred = &valueSetPred{
+
+	nodeIDs := s.accept(func(isQuorum bool) predicate {
+		return &valueSetPred{
 			vals:      s.X,
 			finalVals: &promote,
 			testfn: func(msg *Msg, vals ValueSet) ValueSet {
-				return vals.Intersection(msg.votesOrAcceptsNominatedSet())
+				setFn := msg.acceptsNominatedSet
+				if isQuorum {
+					setFn = msg.votesOrAcceptsNominatedSet
+				}
+				return vals.Intersection(setFn())
 			},
 		}
-		nodeIDs = s.findQuorum(pred)
-	}
+	})
 	if len(nodeIDs) > 0 {
 		s.X = s.X.Minus(promote)
 		s.Y = s.Y.Union(promote)
@@ -492,14 +475,13 @@ func (s *Slot) updateYZ() {
 	// Look for values in s.Y to confirm, moving slot to the PREPARE
 	// phase.
 	promote = nil
-	pred = &valueSetPred{
+	nodeIDs = s.findQuorum(&valueSetPred{
 		vals:      s.Y,
 		finalVals: &promote,
 		testfn: func(msg *Msg, vals ValueSet) ValueSet {
 			return vals.Intersection(msg.acceptsNominatedSet())
 		},
-	}
-	nodeIDs = s.findQuorum(pred)
+	})
 	if len(nodeIDs) > 0 {
 		s.Z = s.Z.Union(promote)
 	}
@@ -508,14 +490,14 @@ func (s *Slot) updateYZ() {
 // Update s.AP - the set of accepted-prepared ballots.
 func (s *Slot) updateAP() {
 	if !s.AP.Contains(s.B) {
-		nodeIDs := s.findBlockingSet(fpred(func(msg *Msg) bool {
-			return msg.acceptsPrepared(s.B)
-		}))
-		if len(nodeIDs) == 0 {
-			nodeIDs = s.findQuorum(fpred(func(msg *Msg) bool {
-				return msg.votesOrAcceptsPrepared(s.B)
-			}))
-		}
+		nodeIDs := s.accept(func(isQuorum bool) predicate {
+			return fpred(func(msg *Msg) bool {
+				if isQuorum {
+					return msg.votesOrAcceptsPrepared(s.B)
+				}
+				return msg.acceptsPrepared(s.B)
+			})
+		})
 		if len(nodeIDs) > 0 {
 			s.AP = s.AP.Add(s.B)
 		}
