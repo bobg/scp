@@ -24,6 +24,9 @@ type Slot struct {
 	Y ValueSet  // votes for accept(nominate(val))
 	Z ValueSet  // confirmed nominated values
 
+	maxPriPeers NodeIDSet // set of peers that have ever had max priority
+	nextRound   int       // 1+(latest round at which maxPriPeers was updated)
+
 	B     Ballot
 	P, PP Ballot    // two highest "prepared" ballots with differing values
 	C, H  Ballot    // lowest and highest confirmed-prepared or accepted-commit ballots (depending on phase)
@@ -424,8 +427,9 @@ func (s *Slot) Round() int {
 // Tells whether the given peer has or had the maximum priority in the
 // current or any earlier nomination round.
 func (s *Slot) maxPrioritySender(nodeID NodeID) (bool, error) {
-	for round := s.Round(); round >= 0; round-- {
-		neighbors, err := s.V.Neighbors(s.ID, round)
+	round := s.Round()
+	for r := s.nextRound; r <= round; r++ {
+		neighbors, err := s.V.Neighbors(s.ID, r)
 		if err != nil {
 			return false, err
 		}
@@ -434,7 +438,7 @@ func (s *Slot) maxPrioritySender(nodeID NodeID) (bool, error) {
 			sender      NodeID
 		)
 		for _, neighbor := range neighbors {
-			priority, err := s.V.Priority(s.ID, round, neighbor)
+			priority, err := s.V.Priority(s.ID, r, neighbor)
 			if err != nil {
 				return false, err
 			}
@@ -443,11 +447,10 @@ func (s *Slot) maxPrioritySender(nodeID NodeID) (bool, error) {
 				sender = neighbor
 			}
 		}
-		if sender == nodeID {
-			return true, nil
-		}
+		s.maxPriPeers = s.maxPriPeers.Add(sender)
 	}
-	return false, nil
+	s.nextRound = round + 1
+	return s.maxPriPeers.Contains(nodeID), nil
 }
 
 func (s *Slot) updateYZ() {
