@@ -87,12 +87,12 @@ func main() {
 		}
 
 		for looping := true; looping; {
-			// After one second of inactivity, resend the latest messages to everyone.
+			// After one second of inactivity, ping each node.
 			timer := time.NewTimer(time.Second)
 
 			select {
 			case msg := <-ch:
-				// Never mind about resending messages.
+				// Never mind about pinging nodes.
 				if !timer.Stop() {
 					<-timer.C
 				}
@@ -150,21 +150,8 @@ func main() {
 
 			case <-timer.C:
 				// It's too quiet around here.
-				for nodeID, latest := range msgs {
-					if latest == nil {
-						continue
-					}
-					for _, e := range entries {
-						n := e.node
-						if n.ID == nodeID {
-							continue
-						}
-						err := n.Handle(latest)
-						if err != nil {
-							n.Logf("could not handle resend of %s: %s", latest, err)
-							continue
-						}
-					}
+				for _, e := range entries {
+					e.node.Ping()
 				}
 			}
 		}

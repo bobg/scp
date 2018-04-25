@@ -57,6 +57,10 @@ func (n *Node) Handle(msg *Msg) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	return n.handle(msg)
+}
+
+func (n *Node) handle(msg *Msg) error {
 	if topic, ok := n.Ext[msg.I]; ok {
 		// This node has already externalized a value for the given slot.
 		// Send an EXTERNALIZE message outbound, unless the inbound
@@ -92,6 +96,23 @@ func (n *Node) Handle(msg *Msg) error {
 	}
 
 	n.ch <- outbound
+	return nil
+}
+
+// Ping causes n to re-Handle the latest message from each sender in
+// all pending slots.
+func (n *Node) Ping() error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	for _, s := range n.Pending {
+		for _, msg := range s.M {
+			err := n.handle(msg)
+			if err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

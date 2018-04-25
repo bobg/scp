@@ -3,6 +3,7 @@ package scp
 import (
 	"bytes"
 	"math"
+	"reflect"
 	"time"
 )
 
@@ -12,10 +13,11 @@ type SlotID int
 // Slot maintains the state of a node's slot while it is undergoing
 // nomination and balloting.
 type Slot struct {
-	ID SlotID
-	V  *Node
-	Ph Phase           // PhNom -> PhPrep -> PhCommit -> PhExt
-	M  map[NodeID]*Msg // latest message from each peer
+	ID    SlotID
+	V     *Node
+	Ph    Phase            // PhNom -> PhPrep -> PhCommit -> PhExt
+	M     map[NodeID]*Msg  // latest message from each peer
+	resps map[NodeID]Topic // responses to latest message from each peer
 
 	T time.Time // time at which this slot was created (for computing the nomination round)
 	X ValueSet  // votes for nominate(val)
@@ -42,10 +44,11 @@ const (
 
 func newSlot(id SlotID, n *Node) *Slot {
 	return &Slot{
-		ID: id,
-		V:  n,
-		T:  time.Now(),
-		M:  make(map[NodeID]*Msg),
+		ID:    id,
+		V:     n,
+		T:     time.Now(),
+		M:     make(map[NodeID]*Msg),
+		resps: make(map[NodeID]Topic),
 	}
 }
 
@@ -67,7 +70,17 @@ var (
 // processes an incoming protocol message and returns an outbound
 // protocol message in response, or nil if the incoming message is
 // ignored.
-func (s *Slot) Handle(msg *Msg) (*Msg, error) {
+func (s *Slot) Handle(msg *Msg) (resp *Msg, err error) {
+	defer func() {
+		if err != nil && resp != nil {
+			if oldTopic := s.resps[msg.V]; reflect.DeepEqual(resp.T, oldTopic) {
+				resp = nil
+			} else {
+				s.resps[msg.V] = resp.T
+			}
+		}
+	}()
+
 	var renom bool
 	if have, ok := s.M[msg.V]; ok && !have.T.Less(msg.T) {
 		// We already have a message from this sender that's the same or
@@ -77,7 +90,7 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 	} else {
 		s.M[msg.V] = msg
 	}
-	s.Logf("* handling %s", msg)
+	// s.Logf("* handling %s", msg)
 
 	switch s.Ph { // note, s.Ph == PhExt should never be true
 	case PhNom:
