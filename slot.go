@@ -66,13 +66,13 @@ var (
 	DeferredUpdateInterval = time.Second
 )
 
-// Handle embodies most of the nomination and balloting protocols. It
+// This embodies most of the nomination and balloting protocols. It
 // processes an incoming protocol message and returns an outbound
 // protocol message in response, or nil if the incoming message is
 // ignored.
-func (s *Slot) Handle(msg *Msg) (resp *Msg, err error) {
+func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 	defer func() {
-		if err != nil && resp != nil {
+		if err == nil && resp != nil {
 			if oldTopic := s.resps[msg.V]; reflect.DeepEqual(resp.T, oldTopic) {
 				resp = nil
 			} else {

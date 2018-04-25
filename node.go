@@ -90,8 +90,14 @@ func (n *Node) handle(msg *Msg) error {
 		// This node has already externalized a value for the given slot.
 		// Send an EXTERNALIZE message outbound, unless the inbound
 		// message is also EXTERNALIZE.
-		// TODO: ...in which case double-check that the values agree?
-		if _, ok = msg.T.(*ExtTopic); !ok {
+		if inTopic, ok := msg.T.(*ExtTopic); ok {
+			// Double check that the inbound EXTERNALIZE value agrees with
+			// this node.
+			if !ValueEqual(inTopic.C.X, topic.C.X) {
+				n.Logf("inbound message %s disagrees with externalized value %s!", msg, topic.C.X)
+				panic("consensus failure")
+			}
+		} else {
 			n.send <- NewMsg(n.ID, msg.I, n.Q, topic)
 		}
 		return nil
@@ -103,7 +109,7 @@ func (n *Node) handle(msg *Msg) error {
 		n.pending[msg.I] = s
 	}
 
-	outbound, err := s.Handle(msg)
+	outbound, err := s.handle(msg)
 	if err != nil {
 		// delete(n.Pending, msg.I) // xxx ?
 		return err
