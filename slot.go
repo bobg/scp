@@ -79,6 +79,7 @@ func (s *Slot) Handle(msg *Msg) (resp *Msg, err error) {
 				s.resps[msg.V] = resp.T
 			}
 		}
+		// s.Logf("* handling %s -> %s", msg, resp)
 	}()
 
 	var renom bool

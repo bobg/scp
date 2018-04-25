@@ -42,7 +42,7 @@ func NewNode(id NodeID, q []NodeIDSet, ch chan<- *Msg) *Node {
 		Q:       q,
 		pending: make(map[SlotID]*Slot),
 		ext:     make(map[SlotID]*ExtTopic),
-		recv:    make(chan Cmd, 100),
+		recv:    make(chan Cmd, 1000),
 		send:    ch,
 	}
 }
@@ -65,12 +65,18 @@ func (n *Node) Run() {
 					continue
 				}
 				s.deferredUpdate()
+
+			case *pingCmd:
+				err := n.ping()
+				if err != nil {
+					n.Logf("%s", err)
+				}
 			}
 		}
 	}()
 }
 
-// Handle processes an incoming protocol message. It sends a protocol
+// handle processes an incoming protocol message. It sends a protocol
 // message in response on n.ch unless the incoming message is
 // ignored. (A message is ignored if it's invalid, redundant, or older
 // than another message already received from the same sender.)
@@ -102,6 +108,7 @@ func (n *Node) handle(msg *Msg) error {
 		// delete(n.Pending, msg.I) // xxx ?
 		return err
 	}
+
 	if outbound == nil {
 		return nil
 	}
