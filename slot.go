@@ -13,21 +13,21 @@ type SlotID int
 // Slot maintains the state of a node's slot while it is undergoing
 // nomination and balloting.
 type Slot struct {
-	ID    SlotID
-	V     *Node
-	Ph    Phase            // PhNom -> PhPrep -> PhCommit -> PhExt
-	M     map[NodeID]*Msg  // latest message from each peer
-	resps map[NodeID]Topic // responses to latest message from each peer
+	ID   SlotID
+	V    *Node
+	Ph   Phase           // PhNom -> PhPrep -> PhCommit -> PhExt
+	M    map[NodeID]*Msg // latest message from each peer
+	sent Topic           // latest message sent
 
 	T time.Time // time at which this slot was created (for computing the nomination round)
 	X ValueSet  // votes for nominate(val)
 	Y ValueSet  // votes for accept(nominate(val))
 	Z ValueSet  // confirmed nominated values
 
-	B      Ballot
-	P, PP  Ballot    // two highest "prepared" ballots with differing values
-	C, H   Ballot    // lowest and highest confirmed-prepared or accepted-commit ballots (depending on phase)
-	AP, CP BallotSet // accepted-prepared, confirmed-prepared
+	B     Ballot
+	P, PP Ballot    // two highest "prepared" ballots with differing values
+	C, H  Ballot    // lowest and highest confirmed-prepared or accepted-commit ballots (depending on phase)
+	AP    BallotSet // accepted-prepared ballots
 
 	Upd *time.Timer // timer for invoking a deferred update
 }
@@ -44,11 +44,10 @@ const (
 
 func newSlot(id SlotID, n *Node) *Slot {
 	return &Slot{
-		ID:    id,
-		V:     n,
-		T:     time.Now(),
-		M:     make(map[NodeID]*Msg),
-		resps: make(map[NodeID]Topic),
+		ID: id,
+		V:  n,
+		T:  time.Now(),
+		M:  make(map[NodeID]*Msg),
 	}
 }
 
@@ -78,13 +77,13 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 
 	defer func() {
 		if err == nil && resp != nil {
-			if oldTopic := s.resps[msg.V]; reflect.DeepEqual(resp.T, oldTopic) {
+			if reflect.DeepEqual(resp.T, s.sent) {
 				resp = nil
 			} else {
-				s.resps[msg.V] = resp.T
+				s.sent = resp.T
 			}
 		}
-		// s.Logf("* handling %s -> %s", msg, resp)
+		s.Logf("* handling %s -> %s", msg, resp)
 	}()
 
 	var renom bool
@@ -156,7 +155,7 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 					s.X = s.X.Union(topic.X)
 					s.X = s.X.Union(topic.Y)
 					s.updateYZ()
-					s.B.X = s.Z.Combine()
+					s.B.X = s.Z.Combine() // xxx does this require changing s.B.N?
 				}
 			}
 		} else {
@@ -176,27 +175,20 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 				}
 			}
 
-			// Update s.CP, the set of confirmed-prepared ballots.
-			var cps []Ballot
+			// Compute the set of confirmed-prepared ballots.
+			var confirmedPrepared BallotSet
 			for _, ap := range s.AP {
-				if s.CP.Contains(ap) {
-					continue
-				}
 				nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
 					return msg.acceptsPrepared(ap)
 				}))
 				if len(nodeIDs) > 0 {
-					cps = append(cps, ap)
+					confirmedPrepared = confirmedPrepared.Add(ap)
 				}
-			}
-			for _, cp := range cps {
-				s.AP = s.AP.Remove(cp)
-				s.CP = s.CP.Add(cp)
 			}
 
 			// Update s.H, the highest confirmed-prepared ballot.
-			if len(s.CP) > 0 && s.H.Less(s.CP[len(s.CP)-1]) {
-				s.H = s.CP[len(s.CP)-1]
+			if len(confirmedPrepared) > 0 && s.H.Less(confirmedPrepared[len(confirmedPrepared)-1]) {
+				s.H = confirmedPrepared[len(confirmedPrepared)-1]
 			}
 
 			s.updateB()
@@ -207,7 +199,7 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 					s.C = ZeroBallot
 				}
 			}
-			if s.C.IsZero() && s.H.N > 0 && !s.P.Aborts(s.H) && !s.PP.Aborts(s.H) {
+			if s.C.IsZero() && !s.H.IsZero() && !s.P.Aborts(s.H) && !s.PP.Aborts(s.H) {
 				s.C = s.B
 			}
 
@@ -225,11 +217,20 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 						return msg.votesOrAcceptsCommit(s.B.X, min, max)
 					},
 				}
-				nodeIDs := s.findBlockingSetOrQuorum(pred)
+				nodeIDs := s.findBlockingSet(pred)
+				if len(nodeIDs) == 0 {
+					pred = &minMaxPred{
+						min:      s.C.N,
+						max:      s.H.N,
+						finalMin: &cn,
+						finalMax: &hn,
+						testfn: func(msg *Msg, min, max int) (bool, int, int) {
+							return msg.acceptsCommit(s.B.X, min, max)
+						},
+					}
+				}
 				if len(nodeIDs) > 0 {
-					// There is a blocking set or quorum that votes-or-accepts
-					// commit(<n, s.B.X>) for various ranges of n that have a
-					// non-empty overlap, so we can accept commit(<n, s.B.X>).
+					// Accept commit(<n, s.B.X>).
 					s.Ph = PhCommit
 					s.C.N = cn
 					s.H.N = hn
@@ -249,10 +250,22 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 			finalMin: &acmin,
 			finalMax: &acmax,
 			testfn: func(msg *Msg, min, max int) (bool, int, int) {
-				return msg.votesOrAcceptsCommit(s.B.X, min, max)
+				return msg.acceptsCommit(s.B.X, min, max)
 			},
 		}
-		nodeIDs := s.findBlockingSetOrQuorum(acpred)
+		nodeIDs := s.findBlockingSet(acpred)
+		if len(nodeIDs) == 0 {
+			acpred = &minMaxPred{
+				min:      s.C.N,
+				max:      math.MaxInt32,
+				finalMin: &acmin,
+				finalMax: &acmax,
+				testfn: func(msg *Msg, min, max int) (bool, int, int) {
+					return msg.votesOrAcceptsCommit(s.B.X, min, max)
+				},
+			}
+			nodeIDs = s.findQuorum(acpred)
+		}
 		if len(nodeIDs) > 0 {
 			s.C.N = acmin
 			s.H.N = acmax
@@ -404,8 +417,8 @@ func (s *Slot) setBX() {
 	if s.Ph >= PhCommit {
 		return
 	}
-	if len(s.CP) > 0 {
-		s.B.X = s.CP[len(s.CP)-1].X
+	if !s.H.IsZero() {
+		s.B.X = s.H.X
 	} else {
 		s.B.X = s.Z.Combine()
 	}
@@ -457,10 +470,20 @@ func (s *Slot) updateYZ() {
 		vals:      s.X,
 		finalVals: &promote,
 		testfn: func(msg *Msg, vals ValueSet) ValueSet {
-			return vals.Intersection(msg.votesOrAcceptsNominatedSet())
+			return vals.Intersection(msg.acceptsNominatedSet())
 		},
 	}
-	nodeIDs := s.findBlockingSetOrQuorum(pred)
+	nodeIDs := s.findBlockingSet(pred)
+	if len(nodeIDs) == 0 {
+		pred = &valueSetPred{
+			vals:      s.X,
+			finalVals: &promote,
+			testfn: func(msg *Msg, vals ValueSet) ValueSet {
+				return vals.Intersection(msg.votesOrAcceptsNominatedSet())
+			},
+		}
+		nodeIDs = s.findQuorum(pred)
+	}
 	if len(nodeIDs) > 0 {
 		s.X = s.X.Minus(promote)
 		s.Y = s.Y.Union(promote)
@@ -485,9 +508,14 @@ func (s *Slot) updateYZ() {
 // Update s.AP - the set of accepted-prepared ballots.
 func (s *Slot) updateAP() {
 	if !s.AP.Contains(s.B) {
-		nodeIDs := s.findBlockingSetOrQuorum(fpred(func(msg *Msg) bool {
-			return msg.votesOrAcceptsPrepared(s.B)
+		nodeIDs := s.findBlockingSet(fpred(func(msg *Msg) bool {
+			return msg.acceptsPrepared(s.B)
 		}))
+		if len(nodeIDs) == 0 {
+			nodeIDs = s.findQuorum(fpred(func(msg *Msg) bool {
+				return msg.votesOrAcceptsPrepared(s.B)
+			}))
+		}
 		if len(nodeIDs) > 0 {
 			s.AP = s.AP.Add(s.B)
 		}

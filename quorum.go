@@ -26,14 +26,6 @@ package scp
 // single peer from each of a node's quorum slices is sufficient to
 // form a blocking set.
 
-func (s *Slot) findBlockingSetOrQuorum(pred predicate) NodeIDSet {
-	nodeIDs := s.findBlockingSet(pred)
-	if len(nodeIDs) > 0 {
-		return nodeIDs
-	}
-	return s.findQuorum(pred)
-}
-
 // Checks that at least one node in each quorum slice satisfies pred
 // (excluding the slot's node).
 func (s *Slot) findBlockingSet(pred predicate) NodeIDSet {
