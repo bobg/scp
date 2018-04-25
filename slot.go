@@ -81,7 +81,7 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 				resp = nil
 			} else {
 				s.sent = resp.T
-				s.Logf("* handling %s -> %s", msg, resp)
+				// s.Logf("* handling %s -> %s", msg, resp)
 			}
 		}
 	}()
@@ -468,8 +468,8 @@ func (s *Slot) updateYZ() {
 		}
 	})
 	if len(nodeIDs) > 0 {
-		s.X = s.X.Minus(promote)
 		s.Y = s.Y.Union(promote)
+		s.X = s.X.Minus(s.Y)
 	}
 
 	// Look for values in s.Y to confirm, moving slot to the PREPARE

@@ -141,6 +141,7 @@ func main() {
 				}
 
 				// Send this message to every other node.
+				// TODO: every other node with msg.V among its peers.
 				for otherNodeID, otherNode := range nodes {
 					if otherNodeID == msg.V {
 						continue
