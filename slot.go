@@ -310,12 +310,15 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 		}
 	}
 
-	// Compute a response message.
-	msg = NewMsg(s.V.ID, s.ID, s.V.Q, nil)
+	return s.Msg(), nil
+}
+
+func (s *Slot) Msg() *Msg {
+	msg := NewMsg(s.V.ID, s.ID, s.V.Q, nil)
 	switch s.Ph {
 	case PhNom:
 		if len(s.X) == 0 && len(s.Y) == 0 {
-			return nil, nil
+			return nil
 		}
 		msg.T = &NomTopic{
 			X: s.X,
@@ -345,8 +348,7 @@ func (s *Slot) Handle(msg *Msg) (*Msg, error) {
 			HN: s.H.N,
 		}
 	}
-
-	return msg, nil
+	return msg
 }
 
 func (s *Slot) deferredUpdate() {
@@ -362,6 +364,8 @@ func (s *Slot) deferredUpdate() {
 	s.setBX()
 
 	s.Logf("deferred update, B is now %s", s.B)
+
+	s.V.ch <- s.Msg()
 }
 
 func (s *Slot) cancelUpd() {

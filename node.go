@@ -32,25 +32,28 @@ type Node struct {
 	// balloting.
 	Ext map[SlotID]*ExtTopic
 
+	ch chan<- *Msg
+
 	mu sync.Mutex
 }
 
 // NewNode produces a new node.
-func NewNode(id NodeID, q []NodeIDSet) *Node {
+func NewNode(id NodeID, q []NodeIDSet, ch chan<- *Msg) *Node {
 	return &Node{
 		ID:      id,
 		Q:       q,
 		Pending: make(map[SlotID]*Slot),
 		Ext:     make(map[SlotID]*ExtTopic),
+		ch:      ch,
 	}
 }
 
-// Handle processes an incoming protocol message. Returns an outbound
-// protocol message in response, or nil if the incoming message is
+// Handle processes an incoming protocol message. It sends a protocol
+// message in response on n.ch unless the incoming message is
 // ignored. (A message is ignored if it's invalid, redundant, or older
 // than another message already received from the same sender.)
 // TODO: add validity checks
-func (n *Node) Handle(msg *Msg) (*Msg, error) {
+func (n *Node) Handle(msg *Msg) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -59,10 +62,10 @@ func (n *Node) Handle(msg *Msg) (*Msg, error) {
 		// Send an EXTERNALIZE message outbound, unless the inbound
 		// message is also EXTERNALIZE.
 		// TODO: ...in which case double-check that the values agree?
-		if _, ok = msg.T.(*ExtTopic); ok {
-			return nil, nil
+		if _, ok = msg.T.(*ExtTopic); !ok {
+			n.ch <- NewMsg(n.ID, msg.I, n.Q, topic)
 		}
-		return NewMsg(n.ID, msg.I, n.Q, topic), nil
+		return nil
 	}
 
 	s, ok := n.Pending[msg.I]
@@ -74,10 +77,10 @@ func (n *Node) Handle(msg *Msg) (*Msg, error) {
 	outbound, err := s.Handle(msg)
 	if err != nil {
 		// delete(n.Pending, msg.I) // xxx ?
-		return nil, err
+		return err
 	}
 	if outbound == nil {
-		return nil, nil
+		return nil
 	}
 
 	if extTopic, ok := outbound.T.(*ExtTopic); ok {
@@ -88,7 +91,8 @@ func (n *Node) Handle(msg *Msg) (*Msg, error) {
 		delete(n.Pending, msg.I)
 	}
 
-	return outbound, nil
+	n.ch <- outbound
+	return nil
 }
 
 // ErrNoPrev occurs when trying to compute a hash (with Node.G) for

@@ -72,10 +72,10 @@ func main() {
 			}
 			q = append(q, qslice)
 		}
-		node := scp.NewNode(nodeID, q)
+		node := scp.NewNode(nodeID, q, ch)
 		nodeCh := make(chan *scp.Msg, 1000)
 		entries[nodeID] = entry{node: node, ch: nodeCh}
-		go nodefn(node, nodeCh, ch)
+		go nodefn(node, nodeCh)
 	}
 
 	for slotID := scp.SlotID(1); ; slotID++ {
@@ -156,19 +156,10 @@ func main() {
 						if n.ID == nodeID {
 							continue
 						}
-						res, err := n.Handle(latest)
+						err := n.Handle(latest)
 						if err != nil {
 							n.Logf("could not handle resend of %s: %s", latest, err)
 							continue
-						}
-						if res == nil {
-							continue
-						}
-						for _, e2 := range entries {
-							if e2.node.ID == nodeID {
-								continue
-							}
-							e2.ch <- res
 						}
 					}
 				}
@@ -178,7 +169,7 @@ func main() {
 }
 
 // runs as a goroutine
-func nodefn(n *scp.Node, recv <-chan *scp.Msg, send chan<- *scp.Msg) {
+func nodefn(n *scp.Node, recv <-chan *scp.Msg) {
 	for msg := range recv {
 		if msg == nil {
 			// New round, try to nominate something.
@@ -193,14 +184,10 @@ func nodefn(n *scp.Node, recv <-chan *scp.Msg, send chan<- *scp.Msg) {
 			msg = scp.NewMsg(n.ID, slotID, n.Q, &scp.NomTopic{X: scp.ValueSet{val}})
 		}
 
-		res, err := n.Handle(msg)
+		err := n.Handle(msg)
 		if err != nil {
 			n.Logf("could not handle %s: %s", msg, err)
 			continue
-		}
-		if res != nil {
-			// n.Logf("handled %s -> %s", msg, res)
-			send <- res
 		}
 	}
 }
