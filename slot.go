@@ -84,24 +84,22 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 				resp = nil
 			} else {
 				s.sent = resp.T
-				s.Logf("* handling %s -> %s", msg, resp)
+				// s.Logf("* handling %s -> %s", msg, resp)
 			}
 		}
 	}()
 
-	var renom bool
 	if have, ok := s.M[msg.V]; ok && !have.T.Less(msg.T) {
 		// We already have a message from this sender that's the same or
 		// newer; use that instead.
 		msg = have
-		renom = s.Ph == PhNom
 	} else {
 		s.M[msg.V] = msg
 	}
 
 	switch s.Ph { // note, s.Ph == PhExt should never be true
 	case PhNom:
-		err = s.doNomPhase(msg, renom)
+		err = s.doNomPhase(msg)
 		if err != nil {
 			return nil, err
 		}
@@ -119,16 +117,11 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 	return s.Msg(), nil
 }
 
-func (s *Slot) doNomPhase(msg *Msg, renom bool) error {
+func (s *Slot) doNomPhase(msg *Msg) error {
 	ok, err := s.maxPrioritySender(msg.V)
 	if err != nil {
 		return err
 	}
-	if renom && !ok {
-		return nil
-	}
-
-	x, y, z := len(s.X), len(s.Y), len(s.Z)
 
 	if ok {
 		// "Echo" nominated values by adding them to s.X.
@@ -154,10 +147,6 @@ func (s *Slot) doNomPhase(msg *Msg, renom bool) error {
 	// Promote accepted-nominated values from X to Y, and
 	// confirmed-nominated values from Y to Z.
 	s.updateYZ()
-
-	if renom && len(s.X) == x && len(s.Y) == y && len(s.Z) == z {
-		return nil
-	}
 
 	if len(s.Z) > 0 {
 		s.Ph = PhPrep
