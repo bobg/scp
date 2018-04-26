@@ -2,6 +2,7 @@ package scp
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"testing"
 )
@@ -80,140 +81,62 @@ func TestAcceptsNominated(t *testing.T) {
 func TestAcceptsPrepared(t *testing.T) {
 	cases := []struct {
 		m             Topic
-		wantA, wantVA bool
+		wantA, wantVA BallotSet
 	}{
 		{
-			m:      &NomTopic{},
-			wantA:  false,
-			wantVA: false,
+			m: &NomTopic{},
 		},
 		{
-			m:      &NomTopic{X: ValueSet{valtype(1)}},
-			wantA:  false,
-			wantVA: false,
+			m: &NomTopic{X: ValueSet{valtype(1)}},
 		},
 		{
-			m:      &NomTopic{Y: ValueSet{valtype(1)}},
-			wantA:  false,
-			wantVA: false,
+			m: &NomTopic{Y: ValueSet{valtype(1)}},
 		},
 		{
 			m:      &PrepTopic{B: Ballot{5, valtype(1)}},
-			wantA:  false,
-			wantVA: true,
+			wantVA: BallotSet{Ballot{5, valtype(1)}},
 		},
 		{
-			m:      &PrepTopic{B: Ballot{5, valtype(2)}},
-			wantA:  false,
-			wantVA: false,
+			m:      &PrepTopic{B: Ballot{5, valtype(1)}, P: Ballot{5, valtype(2)}},
+			wantA:  BallotSet{Ballot{5, valtype(2)}},
+			wantVA: BallotSet{Ballot{5, valtype(1)}, Ballot{5, valtype(2)}},
 		},
 		{
-			m:      &PrepTopic{P: Ballot{5, valtype(1)}},
-			wantA:  true,
-			wantVA: true,
+			m:      &PrepTopic{B: Ballot{5, valtype(1)}, P: Ballot{5, valtype(2)}, PP: Ballot{5, valtype(3)}},
+			wantA:  BallotSet{Ballot{5, valtype(2)}, Ballot{5, valtype(3)}},
+			wantVA: BallotSet{Ballot{5, valtype(1)}, Ballot{5, valtype(2)}, Ballot{5, valtype(3)}},
 		},
 		{
-			m:      &PrepTopic{PP: Ballot{5, valtype(1)}},
-			wantA:  true,
-			wantVA: true,
+			m:      &PrepTopic{B: Ballot{5, valtype(1)}, P: Ballot{5, valtype(2)}, PP: Ballot{5, valtype(3)}, HN: 20},
+			wantA:  BallotSet{Ballot{5, valtype(2)}, Ballot{5, valtype(3)}, Ballot{20, valtype(1)}},
+			wantVA: BallotSet{Ballot{5, valtype(1)}, Ballot{5, valtype(2)}, Ballot{5, valtype(3)}, Ballot{20, valtype(1)}},
 		},
 		{
-			m:      &PrepTopic{P: Ballot{5, valtype(2)}},
-			wantA:  false,
-			wantVA: false,
+			m:      &PrepTopic{B: Ballot{5, valtype(1)}, P: Ballot{5, valtype(2)}, PP: Ballot{5, valtype(3)}, CN: 10, HN: 20},
+			wantA:  BallotSet{Ballot{5, valtype(2)}, Ballot{5, valtype(3)}, Ballot{20, valtype(1)}},
+			wantVA: BallotSet{Ballot{5, valtype(1)}, Ballot{5, valtype(2)}, Ballot{5, valtype(3)}, Ballot{20, valtype(1)}},
 		},
 		{
-			m:      &PrepTopic{PP: Ballot{5, valtype(2)}},
-			wantA:  false,
-			wantVA: false,
-		},
-		{
-			m:      &PrepTopic{B: Ballot{5, valtype(1)}, CN: 6, HN: 10},
-			wantA:  false,
-			wantVA: true,
-		},
-		{
-			m:      &PrepTopic{B: Ballot{5, valtype(1)}, CN: 1, HN: 4},
-			wantA:  false,
-			wantVA: true,
-		},
-		{
-			m:      &PrepTopic{B: Ballot{5, valtype(1)}, CN: 1, HN: 10},
-			wantA:  true,
-			wantVA: true,
-		},
-		{
-			m:      &PrepTopic{B: Ballot{5, valtype(2)}, CN: 6, HN: 10},
-			wantA:  false,
-			wantVA: false,
-		},
-		{
-			m:      &PrepTopic{B: Ballot{5, valtype(2)}, CN: 1, HN: 4},
-			wantA:  false,
-			wantVA: false,
-		},
-		{
-			m:      &PrepTopic{B: Ballot{5, valtype(2)}, CN: 1, HN: 10},
-			wantA:  false,
-			wantVA: false,
-		},
-		{
-			m:      &CommitTopic{B: Ballot{20, valtype(1)}, CN: 10, PN: 10},
-			wantA:  false,
-			wantVA: false,
-		},
-		{
-			m:      &CommitTopic{B: Ballot{20, valtype(1)}, CN: 1, PN: 10},
-			wantA:  true,
-			wantVA: true,
-		},
-		{
-			m:      &CommitTopic{B: Ballot{20, valtype(2)}, CN: 1, PN: 10},
-			wantA:  false,
-			wantVA: false,
-		},
-		{
-			m:      &CommitTopic{B: Ballot{20, valtype(1)}, CN: 10, PN: 1},
-			wantA:  false,
-			wantVA: false,
-		},
-		{
-			m:      &CommitTopic{B: Ballot{20, valtype(1)}, CN: 10, PN: 5},
-			wantA:  true,
-			wantVA: true,
-		},
-		{
-			m:      &CommitTopic{B: Ballot{20, valtype(2)}, CN: 10, PN: 5},
-			wantA:  false,
-			wantVA: false,
+			m:      &CommitTopic{B: Ballot{20, valtype(1)}, CN: 10, HN: 30, PN: 15},
+			wantA:  BallotSet{Ballot{15, valtype(1)}, Ballot{30, valtype(1)}},
+			wantVA: BallotSet{Ballot{15, valtype(1)}, Ballot{30, valtype(1)}, Ballot{math.MaxInt32, valtype(1)}},
 		},
 		{
 			m:      &ExtTopic{C: Ballot{1, valtype(1)}},
-			wantA:  true,
-			wantVA: true,
-		},
-		{
-			m:      &ExtTopic{C: Ballot{1, valtype(2)}},
-			wantA:  false,
-			wantVA: false,
-		},
-		{
-			m:      &ExtTopic{C: Ballot{10, valtype(1)}},
-			wantA:  false,
-			wantVA: false,
+			wantA:  BallotSet{Ballot{math.MaxInt32, valtype(1)}},
+			wantVA: BallotSet{Ballot{math.MaxInt32, valtype(1)}},
 		},
 	}
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%02d", i+1), func(t *testing.T) {
 			e := &Msg{T: tc.m}
-			b := Ballot{5, valtype(1)}
-			got := e.acceptsPrepared(b)
-			if got != tc.wantA {
-				t.Errorf("got acceptsPrepared=%v, want %v", got, tc.wantA)
+			got := e.acceptsPreparedSet()
+			if !reflect.DeepEqual(got, tc.wantA) {
+				t.Errorf("got acceptsPreparedSet=%v, want %v", got, tc.wantA)
 			}
-			got = e.votesOrAcceptsPrepared(b)
-			if got != tc.wantVA {
-				t.Errorf("got votesOrAcceptsPrepared=%v, want %v", got, tc.wantVA)
+			got = e.votesOrAcceptsPreparedSet()
+			if !reflect.DeepEqual(got, tc.wantVA) {
+				t.Errorf("got votesOrAcceptsPreparedSet=%v, want %v", got, tc.wantVA)
 			}
 		})
 	}

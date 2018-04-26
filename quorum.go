@@ -177,6 +177,34 @@ func (p *valueSetPred) next() predicate {
 	}
 }
 
+// This is a predicate that can narrow a set of ballots as it traverses
+// nodes.
+type ballotSetPred struct {
+	ballots      BallotSet
+	nextBallots  BallotSet
+	finalBallots *BallotSet
+	testfn       func(*Msg, BallotSet) BallotSet
+}
+
+func (p *ballotSetPred) test(msg *Msg) bool {
+	if len(p.ballots) == 0 {
+		return false
+	}
+	p.nextBallots = p.testfn(msg, p.ballots)
+	return len(p.nextBallots) > 0
+}
+
+func (p *ballotSetPred) next() predicate {
+	if p.finalBallots != nil {
+		*p.finalBallots = p.nextBallots
+	}
+	return &ballotSetPred{
+		ballots:      p.nextBallots,
+		finalBallots: p.finalBallots,
+		testfn:       p.testfn,
+	}
+}
+
 // This is a predicate that can narrow a set of min/max bounds as it
 // traverses nodes.
 type minMaxPred struct {

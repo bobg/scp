@@ -3,6 +3,7 @@ package scp
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sync/atomic"
 )
 
@@ -107,44 +108,42 @@ func (e *Msg) acceptsNominatedSet() ValueSet {
 	return nil // not reached
 }
 
-// Tells whether e votes prepared(b) or accepts prepared(b).
-func (e *Msg) votesOrAcceptsPrepared(b Ballot) bool {
-	if e.acceptsPrepared(b) {
-		return true
-	}
-	topic, ok := e.T.(*PrepTopic)
-	return ok && b.Equal(topic.B)
-}
-
-// Tells whether e accepts prepared(b).
-func (e *Msg) acceptsPrepared(b Ballot) bool {
+// Returns the set of ballots for which e votes or accepts "prepared."
+func (e *Msg) votesOrAcceptsPreparedSet() BallotSet {
+	result := e.acceptsPreparedSet()
 	switch topic := e.T.(type) {
 	case *PrepTopic:
-		if b.Equal(topic.P) || b.Equal(topic.PP) {
-			return true
+		result = result.Add(topic.B)
+
+	case *CommitTopic:
+		result = result.Add(Ballot{N: math.MaxInt32, X: topic.B.X})
+	}
+	return result
+}
+
+// Returns the set of ballots which e accepts as prepared.
+func (e *Msg) acceptsPreparedSet() BallotSet {
+	var result BallotSet
+	switch topic := e.T.(type) {
+	case *PrepTopic:
+		if !topic.P.IsZero() {
+			result = result.Add(topic.P)
+			if !topic.PP.IsZero() {
+				result = result.Add(topic.PP)
+			}
 		}
 		if topic.HN > 0 {
-			if b.Equal(Ballot{N: topic.HN, X: topic.B.X}) {
-				return true
-			}
-			if topic.CN > 0 {
-				// include "vote commit" as "accept prepared"
-				return topic.CN <= b.N && b.N <= topic.HN && ValueEqual(b.X, topic.B.X)
-			}
+			result = result.Add(Ballot{N: topic.HN, X: topic.B.X})
 		}
 
 	case *CommitTopic:
-		if ValueEqual(b.X, topic.B.X) {
-			// include "vote commit" and "accept commit" as "accept prepared"
-			return b.N >= topic.CN || b.N == topic.PN
-		}
+		result = result.Add(Ballot{N: topic.PN, X: topic.B.X})
+		result = result.Add(Ballot{N: topic.HN, X: topic.B.X})
 
 	case *ExtTopic:
-		if ValueEqual(b.X, topic.C.X) {
-			return b.N >= topic.C.N
-		}
+		result = result.Add(Ballot{N: math.MaxInt32, X: topic.C.X})
 	}
-	return false
+	return result
 }
 
 // Tells whether e votes commit(b) or accepts commit(b) for any ballot

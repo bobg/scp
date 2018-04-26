@@ -28,9 +28,8 @@ type Slot struct {
 	nextRound   int       // 1+(latest round at which maxPriPeers was updated)
 
 	B     Ballot
-	P, PP Ballot    // two highest "prepared" ballots with differing values
-	C, H  Ballot    // lowest and highest confirmed-prepared or accepted-commit ballots (depending on phase)
-	AP    BallotSet // accepted-prepared ballots
+	P, PP Ballot // two highest "accepted prepared" ballots with differing values
+	C, H  Ballot // lowest and highest confirmed-prepared or accepted-commit ballots (depending on phase)
 
 	Upd *time.Timer // timer for invoking a deferred update
 }
@@ -72,6 +71,10 @@ var (
 // processes an incoming protocol message and returns an outbound
 // protocol message in response, or nil if the incoming message is
 // ignored.
+// TODO: prune quorum searches when receiving a "confirm" vote. ("Once
+// "v" enters the confirmed state, it may issue a _confirm_ "a"
+// message to help other nodes confirm "a" more efficiently by pruning
+// their quorum search at "v".")
 func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 	err = msg.valid()
 	if err != nil {
@@ -174,36 +177,28 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 			}
 		}
 	} else {
-		s.updateAP()
-
-		// Update s.P and s.PP, the two highest accepted-prepared
-		// ballots with unequal values.
-		if len(s.AP) > 0 {
-			s.P = s.AP[len(s.AP)-1]
-			s.PP = ZeroBallot
-			for i := len(s.AP) - 2; i >= 0; i-- {
-				ap := s.AP[i]
-				if ap.N < s.P.N && !ValueEqual(ap.X, s.P.X) {
-					s.PP = ap
-					break
-				}
-			}
-		}
-
-		// Compute the set of confirmed-prepared ballots.
-		var confirmedPrepared BallotSet
-		for _, ap := range s.AP {
-			nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
-				return msg.acceptsPrepared(ap)
-			}))
-			if len(nodeIDs) > 0 {
-				confirmedPrepared = confirmedPrepared.Add(ap)
-			}
-		}
+		s.updateP()
 
 		// Update s.H, the highest confirmed-prepared ballot.
-		if len(confirmedPrepared) > 0 && s.H.Less(confirmedPrepared[len(confirmedPrepared)-1]) {
-			s.H = confirmedPrepared[len(confirmedPrepared)-1]
+		var cpIn, cpOut BallotSet
+		if !s.P.IsZero() {
+			cpIn = cpIn.Add(s.P)
+			if !s.PP.IsZero() {
+				cpIn = cpIn.Add(s.PP)
+			}
+		}
+		nodeIDs := s.findQuorum(&ballotSetPred{
+			ballots:      cpIn,
+			finalBallots: &cpOut,
+			testfn: func(msg *Msg, ballots BallotSet) BallotSet {
+				return msg.acceptsPreparedSet()
+			},
+		})
+		if len(nodeIDs) > 0 {
+			h := cpOut[len(cpOut)-1]
+			if s.H.Less(h) {
+				s.H = h
+			}
 		}
 
 		s.updateB()
@@ -251,8 +246,7 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 }
 
 func (s *Slot) doCommitPhase() {
-	s.updateAP()
-	s.P = s.AP[len(s.AP)-1]
+	s.updateP()
 
 	// Update the accepted-commit bounds.
 	var acmin, acmax int
@@ -502,19 +496,45 @@ func (s *Slot) updateYZ() {
 	}
 }
 
-// Update s.AP - the set of accepted-prepared ballots.
-func (s *Slot) updateAP() {
-	if !s.AP.Contains(s.B) {
-		nodeIDs := s.accept(func(isQuorum bool) predicate {
-			return fpred(func(msg *Msg) bool {
+// Update s.P and s.PP, the two highest accepted-prepared ballots.
+// TODO: this gives the highest accepted-prepared ballots in the
+// blocking set or, if there isn't one, in the first quorum
+// found. There might be higher accepted-prepared ballots in other
+// quorums.
+func (s *Slot) updateP() {
+	s.P = ZeroBallot
+	s.PP = ZeroBallot
+
+	var apIn, apOut BallotSet
+	peers := s.V.Peers()
+	for _, peerID := range peers {
+		if msg, ok := s.M[peerID]; ok {
+			apIn = apIn.Union(msg.votesOrAcceptsPreparedSet())
+		}
+	}
+	nodeIDs := s.accept(func(isQuorum bool) predicate {
+		return &ballotSetPred{
+			ballots:      apIn,
+			finalBallots: &apOut,
+			testfn: func(msg *Msg, ballots BallotSet) BallotSet {
+				setFn := msg.acceptsPreparedSet
 				if isQuorum {
-					return msg.votesOrAcceptsPrepared(s.B)
+					setFn = msg.votesOrAcceptsPreparedSet
 				}
-				return msg.acceptsPrepared(s.B)
-			})
-		})
-		if len(nodeIDs) > 0 {
-			s.AP = s.AP.Add(s.B)
+				return ballots.Intersection(setFn())
+			},
+		}
+	})
+	if len(nodeIDs) > 0 {
+		s.P = apOut[len(apOut)-1]
+		if s.Ph == PhPrep {
+			for i := len(apOut) - 2; i >= 0; i-- {
+				ap := apOut[i]
+				if ap.N < s.P.N && !ValueEqual(ap.X, s.P.X) {
+					s.PP = ap
+					break
+				}
+			}
 		}
 	}
 }
