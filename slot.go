@@ -495,8 +495,8 @@ func (s *Slot) updateYZ() {
 	})
 	if len(nodeIDs) > 0 {
 		s.Y = s.Y.Union(promote)
-		s.X = s.X.Minus(s.Y)
 	}
+	s.X = s.X.Minus(s.Y)
 
 	// Look for values in s.Y to confirm, moving slot to the PREPARE
 	// phase.
