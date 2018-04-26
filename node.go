@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"math/big"
+	"time"
 
 	"github.com/davecgh/go-xdr/xdr"
 )
@@ -47,26 +48,40 @@ func NewNode(id NodeID, q []NodeIDSet, ch chan<- *Msg) *Node {
 	}
 }
 
+// After this much idle time, wake up and reconsider every known
+// message for every pending slot.
+const idleInterval = time.Second
+
 // Go processes incoming events for the node. It never returns and
 // should be launched as a goroutine.
 func (n *Node) Run() {
 	go func() {
-		for cmd := range n.recv {
-			switch cmd := cmd.(type) {
-			case *msgCmd:
-				err := n.handle(cmd.msg)
-				if err != nil {
-					n.Logf("ERROR %s", err)
+		for {
+			timer := time.NewTimer(idleInterval)
+
+			select {
+			case cmd := <-n.recv:
+				// Not idle.
+				if !timer.Stop() {
+					<-timer.C
 				}
 
-			case *deferredUpdateCmd:
-				s := n.pending[cmd.slotID]
-				if s == nil {
-					continue
-				}
-				s.deferredUpdate()
+				switch cmd := cmd.(type) {
+				case *msgCmd:
+					err := n.handle(cmd.msg)
+					if err != nil {
+						n.Logf("ERROR %s", err)
+					}
 
-			case *pingCmd:
+				case *deferredUpdateCmd:
+					s := n.pending[cmd.slotID]
+					if s == nil {
+						continue
+					}
+					s.deferredUpdate()
+				}
+
+			case <-timer.C:
 				err := n.ping()
 				if err != nil {
 					n.Logf("ERROR %s", err)

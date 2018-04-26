@@ -16,7 +16,6 @@ import (
 	"log"
 	"math/rand"
 	"strings"
-	"time"
 
 	"github.com/bobg/scp"
 )
@@ -84,76 +83,58 @@ func main() {
 			node.Handle(nomMsg)
 		}
 
-		for looping := true; looping; {
-			// After one second of inactivity, ping each node.
-			timer := time.NewTimer(time.Second)
+		for msg := range ch {
+			if msg.I < slotID {
+				// discard messages about old slots
+				continue
+			}
+			n := nodes[msg.V]
 
-			select {
-			case msg := <-ch:
-				// Never mind about pinging nodes.
-				if !timer.Stop() {
-					<-timer.C
-				}
-				if msg.I < slotID {
-					// discard messages about old slots
-					continue
-				}
-				n := nodes[msg.V]
-
-				if true { // xxx
-					if msgs[msg.V] == nil {
-						n.Logf("%s", msg)
-					} else {
-						switch msgs[msg.V].T.(type) {
-						case *scp.NomTopic:
-							if _, ok := msg.T.(*scp.PrepTopic); ok {
-								n.Logf("%s", msg)
-							}
-						case *scp.PrepTopic:
-							if _, ok := msg.T.(*scp.CommitTopic); ok {
-								n.Logf("%s", msg)
-							}
-						case *scp.CommitTopic:
-							if _, ok := msg.T.(*scp.ExtTopic); ok {
-								n.Logf("%s", msg)
-							}
+			if false { // xxx
+				if msgs[msg.V] == nil {
+					n.Logf("%s", msg)
+				} else {
+					switch msgs[msg.V].T.(type) {
+					case *scp.NomTopic:
+						if _, ok := msg.T.(*scp.PrepTopic); ok {
+							n.Logf("%s", msg)
+						}
+					case *scp.PrepTopic:
+						if _, ok := msg.T.(*scp.CommitTopic); ok {
+							n.Logf("%s", msg)
+						}
+					case *scp.CommitTopic:
+						if _, ok := msg.T.(*scp.ExtTopic); ok {
+							n.Logf("%s", msg)
 						}
 					}
-				} else {
-					n.Logf("%s", msg)
 				}
-				msgs[msg.V] = msg
+			}
+			msgs[msg.V] = msg
 
-				allExt := true
-				for _, m := range msgs {
-					if m == nil {
-						allExt = false
-						break
-					}
-					if _, ok := m.T.(*scp.ExtTopic); !ok {
-						allExt = false
-						break
-					}
+			allExt := true
+			for _, m := range msgs {
+				if m == nil {
+					allExt = false
+					break
 				}
-				if allExt {
-					log.Print("all externalized")
-					looping = false
+				if _, ok := m.T.(*scp.ExtTopic); !ok {
+					allExt = false
+					break
 				}
+			}
+			if allExt {
+				log.Print("all externalized")
+				break
+			}
 
-				// Send this message to every other node.
-				// TODO: every other node with msg.V among its peers.
-				for otherNodeID, otherNode := range nodes {
-					if otherNodeID == msg.V {
-						continue
-					}
-					otherNode.Handle(msg)
+			// Send this message to every other node.
+			// TODO: every other node with msg.V among its peers.
+			for otherNodeID, otherNode := range nodes {
+				if otherNodeID == msg.V {
+					continue
 				}
-
-			case <-timer.C:
-				// It's too quiet around here.
-				for _, node := range nodes {
-					node.Ping()
-				}
+				otherNode.Handle(msg)
 			}
 		}
 	}

@@ -84,7 +84,7 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 				resp = nil
 			} else {
 				s.sent = resp.T
-				// s.Logf("* handling %s -> %s", msg, resp)
+				s.Logf("%s -> %s", msg, resp)
 			}
 		}
 	}()
@@ -370,48 +370,48 @@ func (s *Slot) updateB() {
 		// raise B to the highest confirmed-prepared ballot
 		s.B = s.H
 		s.cancelUpd()
-	} else {
-		// When a node sees sees messages from a quorum to which it
-		// belongs such that each message's "ballot.counter" is
-		// greater than or equal to the local "ballot.counter", the
-		// node arms a timer for its local "ballot.counter + 1"
-		// seconds.
-		if s.Upd == nil { // don't bother if a timer's already armed
-			nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
-				return msg.bN() >= s.B.N
-			}))
-			if len(nodeIDs) > 0 {
-				s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(DeferredUpdateInterval)), s.deferredUpdate)
-			}
+		return
+	}
+	// When a node sees sees messages from a quorum to which it
+	// belongs such that each message's "ballot.counter" is
+	// greater than or equal to the local "ballot.counter", the
+	// node arms a timer for its local "ballot.counter + 1"
+	// seconds.
+	if s.Upd == nil { // don't bother if a timer's already armed
+		nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
+			return msg.bN() >= s.B.N
+		}))
+		if len(nodeIDs) > 0 {
+			s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(DeferredUpdateInterval)), s.deferredUpdate)
 		}
+	}
 
-		// If nodes forming a blocking threshold all have
-		// "ballot.counter" values greater than the local
-		// "ballot.counter", then the local node immediately increases
-		// "ballot.counter" to the lowest value such that this is no
-		// longer the case.  (When doing so, it also disables any
-		// pending timers associated with the old "counter".)
-		var doSetBX bool
-		for {
-			nodeIDs := s.findBlockingSet(fpred(func(msg *Msg) bool {
-				return msg.bN() > s.B.N
-			}))
-			if len(nodeIDs) == 0 {
-				break
-			}
-			doSetBX = true
-			s.cancelUpd()
-			for i, nodeID := range nodeIDs {
-				msg := s.M[nodeID]
-				bn := msg.bN()
-				if i == 0 || bn < s.B.N {
-					s.B.N = bn
-				}
+	// If nodes forming a blocking threshold all have
+	// "ballot.counter" values greater than the local
+	// "ballot.counter", then the local node immediately increases
+	// "ballot.counter" to the lowest value such that this is no
+	// longer the case.  (When doing so, it also disables any
+	// pending timers associated with the old "counter".)
+	var doSetBX bool
+	for {
+		nodeIDs := s.findBlockingSet(fpred(func(msg *Msg) bool {
+			return msg.bN() > s.B.N
+		}))
+		if len(nodeIDs) == 0 {
+			break
+		}
+		doSetBX = true
+		s.cancelUpd()
+		for i, nodeID := range nodeIDs {
+			msg := s.M[nodeID]
+			bn := msg.bN()
+			if i == 0 || bn < s.B.N {
+				s.B.N = bn
 			}
 		}
-		if doSetBX {
-			s.setBX()
-		}
+	}
+	if doSetBX {
+		s.setBX()
 	}
 }
 
