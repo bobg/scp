@@ -101,190 +101,213 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 
 	switch s.Ph { // note, s.Ph == PhExt should never be true
 	case PhNom:
-		ok, err := s.maxPrioritySender(msg.V)
+		err = s.doNomPhase(msg, renom)
 		if err != nil {
 			return nil, err
 		}
-		if renom && !ok {
-			return nil, nil
-		}
-
-		x, y, z := len(s.X), len(s.Y), len(s.Z)
-
-		if ok {
-			// "Echo" nominated values by adding them to s.X.
-			switch topic := msg.T.(type) {
-			case *NomTopic:
-				s.X = s.X.Union(topic.X)
-				s.X = s.X.Union(topic.Y)
-			case *PrepTopic:
-				s.X = s.X.Add(topic.B.X)
-				if !topic.P.IsZero() {
-					s.X = s.X.Add(topic.P.X)
-				}
-				if !topic.PP.IsZero() {
-					s.X = s.X.Add(topic.PP.X)
-				}
-			case *CommitTopic:
-				s.X = s.X.Add(topic.B.X)
-			case *ExtTopic:
-				s.X = s.X.Add(topic.C.X)
-			}
-		}
-
-		// Promote accepted-nominated values from X to Y, and
-		// confirmed-nominated values from Y to Z.
-		s.updateYZ()
-
-		if renom && len(s.X) == x && len(s.Y) == y && len(s.Z) == z {
-			return nil, nil
-		}
-
-		if len(s.Z) > 0 {
-			s.Ph = PhPrep
-			s.B.N = 1
-			s.setBX()
-		}
 
 	case PhPrep:
-		if topic, ok := msg.T.(*NomTopic); ok {
-			if s.H.N == 0 {
-				// Can still update s.Z and s.B.X
-				ok, err := s.maxPrioritySender(msg.V)
-				if err != nil {
-					return nil, err
-				}
-				if ok {
-					s.X = s.X.Union(topic.X)
-					s.X = s.X.Union(topic.Y)
-					s.updateYZ()
-					s.B.X = s.Z.Combine() // xxx does this require changing s.B.N?
-				}
-			}
-		} else {
-			s.updateAP()
-
-			// Update s.P and s.PP, the two highest accepted-prepared
-			// ballots with unequal values.
-			if len(s.AP) > 0 {
-				s.P = s.AP[len(s.AP)-1]
-				s.PP = ZeroBallot
-				for i := len(s.AP) - 2; i >= 0; i-- {
-					ap := s.AP[i]
-					if ap.N < s.P.N && !ValueEqual(ap.X, s.P.X) {
-						s.PP = ap
-						break
-					}
-				}
-			}
-
-			// Compute the set of confirmed-prepared ballots.
-			var confirmedPrepared BallotSet
-			for _, ap := range s.AP {
-				nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
-					return msg.acceptsPrepared(ap)
-				}))
-				if len(nodeIDs) > 0 {
-					confirmedPrepared = confirmedPrepared.Add(ap)
-				}
-			}
-
-			// Update s.H, the highest confirmed-prepared ballot.
-			if len(confirmedPrepared) > 0 && s.H.Less(confirmedPrepared[len(confirmedPrepared)-1]) {
-				s.H = confirmedPrepared[len(confirmedPrepared)-1]
-			}
-
-			s.updateB()
-
-			// Update s.C.
-			if !s.C.IsZero() {
-				if (s.C.Less(s.P) && !ValueEqual(s.P.X, s.C.X)) || (s.C.Less(s.PP) && !ValueEqual(s.PP.X, s.C.X)) {
-					s.C = ZeroBallot
-				}
-			}
-			if s.C.IsZero() && !s.H.IsZero() && !s.P.Aborts(s.H) && !s.PP.Aborts(s.H) {
-				s.C = s.B
-			}
-
-			// The PREPARE phase ends at a node when the statement "commit
-			// b" reaches the accept state in federated voting for some
-			// ballot "b".
-			if !s.C.IsZero() && !s.H.IsZero() {
-				var cn, hn int
-				nodeIDs := s.accept(func(isQuorum bool) predicate {
-					return &minMaxPred{
-						min:      s.C.N,
-						max:      s.H.N,
-						finalMin: &cn,
-						finalMax: &hn,
-						testfn: func(msg *Msg, min, max int) (bool, int, int) {
-							rangeFn := msg.acceptsCommit
-							if isQuorum {
-								rangeFn = msg.votesOrAcceptsCommit
-							}
-							return rangeFn(s.B.X, min, max)
-						},
-					}
-				})
-				if len(nodeIDs) > 0 {
-					// Accept commit(<n, s.B.X>).
-					s.Ph = PhCommit
-					s.C.N = cn
-					s.H.N = hn
-				}
-			}
+		err = s.doPrepPhase(msg)
+		if err != nil {
+			return nil, err
 		}
 
 	case PhCommit:
-		s.updateAP()
-		s.P = s.AP[len(s.AP)-1]
+		s.doCommitPhase()
+	}
 
-		// Update the accepted-commit bounds.
-		var acmin, acmax int
-		nodeIDs := s.accept(func(isQuorum bool) predicate {
-			return &minMaxPred{
-				min:      s.C.N,
-				max:      math.MaxInt32,
-				finalMin: &acmin,
-				finalMax: &acmax,
-				testfn: func(msg *Msg, min, max int) (bool, int, int) {
-					rangeFn := msg.acceptsCommit
-					if isQuorum {
-						rangeFn = msg.votesOrAcceptsCommit
-					}
-					return rangeFn(s.B.X, min, max)
-				},
+	return s.Msg(), nil
+}
+
+func (s *Slot) doNomPhase(msg *Msg, renom bool) error {
+	ok, err := s.maxPrioritySender(msg.V)
+	if err != nil {
+		return err
+	}
+	if renom && !ok {
+		return nil
+	}
+
+	x, y, z := len(s.X), len(s.Y), len(s.Z)
+
+	if ok {
+		// "Echo" nominated values by adding them to s.X.
+		switch topic := msg.T.(type) {
+		case *NomTopic:
+			s.X = s.X.Union(topic.X)
+			s.X = s.X.Union(topic.Y)
+		case *PrepTopic:
+			s.X = s.X.Add(topic.B.X)
+			if !topic.P.IsZero() {
+				s.X = s.X.Add(topic.P.X)
 			}
-		})
-		if len(nodeIDs) > 0 {
-			s.C.N = acmin
-			s.H.N = acmax
+			if !topic.PP.IsZero() {
+				s.X = s.X.Add(topic.PP.X)
+			}
+		case *CommitTopic:
+			s.X = s.X.Add(topic.B.X)
+		case *ExtTopic:
+			s.X = s.X.Add(topic.C.X)
+		}
+	}
+
+	// Promote accepted-nominated values from X to Y, and
+	// confirmed-nominated values from Y to Z.
+	s.updateYZ()
+
+	if renom && len(s.X) == x && len(s.Y) == y && len(s.Z) == z {
+		return nil
+	}
+
+	if len(s.Z) > 0 {
+		s.Ph = PhPrep
+		s.B.N = 1
+		s.setBX()
+		return s.doPrepPhase(msg)
+	}
+
+	return nil
+}
+
+func (s *Slot) doPrepPhase(msg *Msg) error {
+	if topic, ok := msg.T.(*NomTopic); ok {
+		if s.H.N == 0 {
+			// Can still update s.Z and s.B.X
+			ok, err := s.maxPrioritySender(msg.V)
+			if err != nil {
+				return err
+			}
+			if ok {
+				s.X = s.X.Union(topic.X)
+				s.X = s.X.Union(topic.Y)
+				s.updateYZ()
+				s.B.X = s.Z.Combine() // xxx does this require changing s.B.N?
+			}
+		}
+	} else {
+		s.updateAP()
+
+		// Update s.P and s.PP, the two highest accepted-prepared
+		// ballots with unequal values.
+		if len(s.AP) > 0 {
+			s.P = s.AP[len(s.AP)-1]
+			s.PP = ZeroBallot
+			for i := len(s.AP) - 2; i >= 0; i-- {
+				ap := s.AP[i]
+				if ap.N < s.P.N && !ValueEqual(ap.X, s.P.X) {
+					s.PP = ap
+					break
+				}
+			}
+		}
+
+		// Compute the set of confirmed-prepared ballots.
+		var confirmedPrepared BallotSet
+		for _, ap := range s.AP {
+			nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
+				return msg.acceptsPrepared(ap)
+			}))
+			if len(nodeIDs) > 0 {
+				confirmedPrepared = confirmedPrepared.Add(ap)
+			}
+		}
+
+		// Update s.H, the highest confirmed-prepared ballot.
+		if len(confirmedPrepared) > 0 && s.H.Less(confirmedPrepared[len(confirmedPrepared)-1]) {
+			s.H = confirmedPrepared[len(confirmedPrepared)-1]
 		}
 
 		s.updateB()
 
-		// As soon as a node confirms "commit b" for any ballot "b", it
-		// moves to the EXTERNALIZE stage.
-		var cn, hn int
-		ccpred := &minMaxPred{
-			min:      s.C.N,
-			max:      s.H.N,
-			finalMin: &cn,
-			finalMax: &hn,
-			testfn: func(msg *Msg, min, max int) (bool, int, int) {
-				return msg.acceptsCommit(s.B.X, min, max)
-			},
+		// Update s.C.
+		if !s.C.IsZero() {
+			if (s.C.Less(s.P) && !ValueEqual(s.P.X, s.C.X)) || (s.C.Less(s.PP) && !ValueEqual(s.PP.X, s.C.X)) {
+				s.C = ZeroBallot
+			}
 		}
-		nodeIDs = s.findQuorum(ccpred)
-		if len(nodeIDs) > 0 {
-			s.Ph = PhExt // \o/
-			s.C.N = cn
-			s.H.N = hn
-			s.cancelUpd()
+		if s.C.IsZero() && !s.H.IsZero() && !s.P.Aborts(s.H) && !s.PP.Aborts(s.H) {
+			s.C = s.B
+		}
+
+		// The PREPARE phase ends at a node when the statement "commit
+		// b" reaches the accept state in federated voting for some
+		// ballot "b".
+		if !s.C.IsZero() && !s.H.IsZero() {
+			var cn, hn int
+			nodeIDs := s.accept(func(isQuorum bool) predicate {
+				return &minMaxPred{
+					min:      s.C.N,
+					max:      s.H.N,
+					finalMin: &cn,
+					finalMax: &hn,
+					testfn: func(msg *Msg, min, max int) (bool, int, int) {
+						rangeFn := msg.acceptsCommit
+						if isQuorum {
+							rangeFn = msg.votesOrAcceptsCommit
+						}
+						return rangeFn(s.B.X, min, max)
+					},
+				}
+			})
+			if len(nodeIDs) > 0 {
+				// Accept commit(<n, s.B.X>).
+				s.Ph = PhCommit
+				s.C.N = cn
+				s.H.N = hn
+				s.doCommitPhase()
+			}
 		}
 	}
+	return nil
+}
 
-	return s.Msg(), nil
+func (s *Slot) doCommitPhase() {
+	s.updateAP()
+	s.P = s.AP[len(s.AP)-1]
+
+	// Update the accepted-commit bounds.
+	var acmin, acmax int
+	nodeIDs := s.accept(func(isQuorum bool) predicate {
+		return &minMaxPred{
+			min:      s.C.N,
+			max:      math.MaxInt32,
+			finalMin: &acmin,
+			finalMax: &acmax,
+			testfn: func(msg *Msg, min, max int) (bool, int, int) {
+				rangeFn := msg.acceptsCommit
+				if isQuorum {
+					rangeFn = msg.votesOrAcceptsCommit
+				}
+				return rangeFn(s.B.X, min, max)
+			},
+		}
+	})
+	if len(nodeIDs) > 0 {
+		s.C.N = acmin
+		s.H.N = acmax
+	}
+
+	s.updateB()
+
+	// As soon as a node confirms "commit b" for any ballot "b", it
+	// moves to the EXTERNALIZE stage.
+	var cn, hn int
+	ccpred := &minMaxPred{
+		min:      s.C.N,
+		max:      s.H.N,
+		finalMin: &cn,
+		finalMax: &hn,
+		testfn: func(msg *Msg, min, max int) (bool, int, int) {
+			return msg.acceptsCommit(s.B.X, min, max)
+		},
+	}
+	nodeIDs = s.findQuorum(ccpred)
+	if len(nodeIDs) > 0 {
+		s.Ph = PhExt // \o/
+		s.C.N = cn
+		s.H.N = hn
+		s.cancelUpd()
+	}
 }
 
 func (s *Slot) Msg() *Msg {
