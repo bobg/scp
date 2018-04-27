@@ -76,6 +76,11 @@ var (
 // message to help other nodes confirm "a" more efficiently by pruning
 // their quorum search at "v".")
 func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
+	if s.V.ID == msg.V && s.Ph != PhNom {
+		// A node doesn't message itself except during nomination.
+		return nil, nil
+	}
+
 	err = msg.valid()
 	if err != nil {
 		return nil, err

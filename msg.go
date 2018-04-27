@@ -69,6 +69,9 @@ func (e *Msg) bN() int {
 
 	case *CommitTopic:
 		return topic.B.N
+
+	case *ExtTopic:
+		return topic.C.N
 	}
 	return 0
 }
