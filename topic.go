@@ -20,7 +20,13 @@ func (nt *NomTopic) Less(other Topic) bool {
 	if !ok {
 		return true // NOMINATE messages are less than all other messages
 	}
-	return len(nt.X)+len(nt.Y) < len(o.X)+len(o.Y)
+	if len(nt.Y) < len(o.Y) {
+		return true
+	}
+	if len(nt.Y) > len(o.Y) {
+		return false
+	}
+	return len(nt.X) < len(nt.Y)
 }
 
 func (nt *NomTopic) String() string {
