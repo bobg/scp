@@ -105,20 +105,20 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 		s.M[msg.V] = msg
 	}
 
-	switch s.Ph { // note, s.Ph == PhExt should never be true
-	case PhNom:
+	if s.Ph == PhNom {
 		err = s.doNomPhase(msg)
 		if err != nil {
 			return nil, err
 		}
+	}
 
-	case PhPrep:
+	if s.Ph == PhPrep {
 		err = s.doPrepPhase(msg)
 		if err != nil {
 			return nil, err
 		}
-
-	case PhCommit:
+	}
+	if s.Ph == PhCommit {
 		s.doCommitPhase()
 	}
 
@@ -160,7 +160,6 @@ func (s *Slot) doNomPhase(msg *Msg) error {
 		s.Ph = PhPrep
 		s.B.N = 1
 		s.setBX()
-		return s.doPrepPhase(msg)
 	}
 
 	return nil
@@ -221,30 +220,9 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 		// The PREPARE phase ends at a node when the statement "commit
 		// b" reaches the accept state in federated voting for some
 		// ballot "b".
-		if !s.C.IsZero() && !s.H.IsZero() {
-			var cn, hn int
-			nodeIDs := s.accept(func(isQuorum bool) predicate {
-				return &minMaxPred{
-					min:      s.C.N,
-					max:      s.H.N,
-					finalMin: &cn,
-					finalMax: &hn,
-					testfn: func(msg *Msg, min, max int) (bool, int, int) {
-						rangeFn := msg.acceptsCommit
-						if isQuorum {
-							rangeFn = msg.votesOrAcceptsCommit
-						}
-						return rangeFn(s.B.X, min, max)
-					},
-				}
-			})
-			if len(nodeIDs) > 0 {
-				// Accept commit(<n, s.B.X>).
-				s.Ph = PhCommit
-				s.C.N = cn
-				s.H.N = hn
-				s.doCommitPhase()
-			}
+		if s.updateAcceptsCommitBounds() {
+			// Accept commit(<n, s.B.X>).
+			s.Ph = PhCommit
 		}
 	}
 	return nil
@@ -252,15 +230,37 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 
 func (s *Slot) doCommitPhase() {
 	s.updateP()
+	s.updateAcceptsCommitBounds()
+	s.updateB()
 
-	// Update the accepted-commit bounds.
-	var acmin, acmax int
+	// As soon as a node confirms "commit b" for any ballot "b", it
+	// moves to the EXTERNALIZE stage.
+	var cn, hn int
+	nodeIDs := s.findQuorum(&minMaxPred{
+		min:      s.C.N,
+		max:      s.H.N,
+		finalMin: &cn,
+		finalMax: &hn,
+		testfn: func(msg *Msg, min, max int) (bool, int, int) {
+			return msg.acceptsCommit(s.B.X, min, max)
+		},
+	})
+	if len(nodeIDs) > 0 {
+		s.Ph = PhExt // \o/
+		s.C.N = cn
+		s.H.N = hn
+		s.cancelUpd()
+	}
+}
+
+func (s *Slot) updateAcceptsCommitBounds() bool {
+	var cn, hn int
 	nodeIDs := s.accept(func(isQuorum bool) predicate {
 		return &minMaxPred{
-			min:      s.C.N,
+			min:      1,
 			max:      math.MaxInt32,
-			finalMin: &acmin,
-			finalMax: &acmax,
+			finalMin: &cn,
+			finalMax: &hn,
 			testfn: func(msg *Msg, min, max int) (bool, int, int) {
 				rangeFn := msg.acceptsCommit
 				if isQuorum {
@@ -271,31 +271,13 @@ func (s *Slot) doCommitPhase() {
 		}
 	})
 	if len(nodeIDs) > 0 {
-		s.C.N = acmin
-		s.H.N = acmax
-	}
-
-	s.updateB()
-
-	// As soon as a node confirms "commit b" for any ballot "b", it
-	// moves to the EXTERNALIZE stage.
-	var cn, hn int
-	ccpred := &minMaxPred{
-		min:      s.C.N,
-		max:      s.H.N,
-		finalMin: &cn,
-		finalMax: &hn,
-		testfn: func(msg *Msg, min, max int) (bool, int, int) {
-			return msg.acceptsCommit(s.B.X, min, max)
-		},
-	}
-	nodeIDs = s.findQuorum(ccpred)
-	if len(nodeIDs) > 0 {
-		s.Ph = PhExt // \o/
 		s.C.N = cn
+		s.C.X = s.B.X
 		s.H.N = hn
-		s.cancelUpd()
+		s.H.X = s.B.X
+		return true
 	}
+	return false
 }
 
 func (s *Slot) Msg() *Msg {

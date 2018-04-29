@@ -30,7 +30,13 @@ func NewMsg(v NodeID, i SlotID, q []NodeIDSet, t Topic) *Msg {
 	}
 }
 
-func (e *Msg) valid() error {
+func (e *Msg) valid() (err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("%s: %s", err, e)
+		}
+	}()
+
 	switch topic := e.T.(type) {
 	case *NomTopic:
 		if len(topic.X.Intersection(topic.Y)) != 0 {
