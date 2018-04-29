@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"chain/crypto/ed25519"
-	"chain/protocol/bc"
+	"github.com/chain/txvm/crypto/ed25519"
+	"github.com/chain/txvm/protocol/bc"
 
 	"github.com/bobg/scp"
 )
