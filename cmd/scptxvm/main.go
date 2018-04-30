@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -149,7 +150,7 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			u.Path = "/block"
-			u.RawQuery = "id=" + blockID.(valtype).String()
+			u.RawQuery = fmt.Sprintf("height=%d&id=%x", msg.I, blockID.(valtype).String())
 			req, err := http.NewRequest("GET", u.String(), nil)
 			if err != nil {
 				return err
@@ -184,9 +185,18 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func blockHandler(w http.ResponseWriter, r *http.Request) {
+	heightStr := r.FormValue("height")
+	height, err := strconv.Atoi(heightStr)
+	if err != nil {
+		// xxx
+	}
 	blockIDHex := r.FormValue("id")
+	blockID, err := hex.DecodeString(blockIDHex)
+	if err != nil {
+		// xxx
+	}
 
-	block, err := getBlock(blockID)
+	block, err := getBlock(height, blockID)
 	if err != nil {
 		// xxx
 	}

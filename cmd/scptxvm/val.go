@@ -47,20 +47,13 @@ func (v valtype) Combine(other valtype, slotID SlotID) valtype {
 		return v
 	}
 
-	b1, err := getBlock(v)
+	b1, err := getBlock(slotID, v)
 	if err != nil {
 		// xxx
 	}
-	b2, err := getBlock(other)
+	b2, err := getBlock(slotID, other)
 	if err != nil {
 		// xxx
-	}
-
-	if b1.Height != uint64(slotID) {
-		// xxx err
-	}
-	if b2.Height != uint64(slotID) {
-		// xxx err
 	}
 
 	txs := b1.Transactions
