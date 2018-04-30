@@ -10,10 +10,11 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chain/txvm/crypto/ed25519"
+	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
 	"golang.org/x/sync/errgroup"
 
@@ -21,17 +22,35 @@ import (
 )
 
 var (
-	node *scp.Node
+	chain *protocol.Chain
+	node  *scp.Node
 
-	blockMap   map[string]*bc.Block
-	blockMapMu sync.Mutex
+	heightChan = make(chan uint64, 1)
+	nomChan    = make(chan interface{}, 1)
+	msgChan    = make(chan *scp.Msg, 1)
 )
 
 func main() {
 	secretKeyHex := flag.String("seckey", "", "secret key hex")
 	addr := flag.String("addr", "", "listen address (host:port)")
+	dir := flag.String("dir", ".", "root of working dir")
 
 	flag.Parse()
+
+	store := &pstore{
+		height:   height,
+		dir:      *dir,
+		snapshot: snapshot,
+	}
+
+	heightChan = make(chan uint64)
+
+	var err error
+
+	chain, err = protocol.NewChain(ctx, initialBlock, store, heightChan)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	secretKeyBytes, err := hex.DecodeString()
 	if err != nil {
@@ -46,15 +65,13 @@ func main() {
 		pubKeyHex = hex.EncodeToString(pubKey)
 	)
 
-	// Maps hex-encoded block IDs to the blocks they denote.
-	blockMap = make(map[string]*bc.Block)
-
 	nodeID := fmt.Sprintf("http://%s/%x", *addr, pubKey)
 
-	ch := make(chan *scp.Msg)
-	node = scp.NewNode(nodeID, q, ch)
+	node = scp.NewNode(nodeID, q, msgChan)
 	go node.Run()
-	go handleNodeOutput(node, ch, secretKey)
+	go handleNodeOutput(node, secretKey)
+
+	nomchan = make(chan interface{}, 1)
 	go nominate(node)
 
 	http.HandleFunc("/"+pubKeyHex, protocolHandler) // scp protocol messages go here
@@ -77,6 +94,22 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 	msg, err := unmarshal(pmsg)
 	if err != nil {
 		// xxx
+	}
+
+	nh := atomic.LoadInt32(&nomHeight)
+	if msg.I >= nh {
+		var bump bool
+		switch msg.T.(type) {
+		case *scp.CommitTopic:
+			bump = true
+		case *scp.ExtTopic:
+			bump = true
+		}
+		if bump {
+			// Can no longer nominate for slot nomHeight.
+			atomic.StoreInt32(&nomHeight, msg.I+1)
+			nomChan <- msg.I + 1
+		}
 	}
 
 	// xxx if this is a commit or externalize message, might be time to
@@ -110,14 +143,11 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 	for _, blockID := range blockIDs {
 		blockID := blockID
 		g.Go(func() error {
-			blockMapMu.Lock()
-			_, ok := blockMap[blockID]
-			blockMapMu.Unlock()
-			if ok {
+			if haveBlock(blockID) {
 				return nil
 			}
 
-			// xxx construct block-requesting URL
+			// xxx construct block-requesting URL (based on msg.V)
 			req, err := http.NewRequest("GET", url, nil)
 			if err != nil {
 				return err
@@ -139,10 +169,7 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 				// xxx
 			}
 
-			blockMapMu.Lock()
-			blockMap[blockID] = block
-			blockMapMu.Unlock()
-			return nil
+			return storeBlock(block)
 		})
 	}
 	err = g.Wait()
@@ -157,12 +184,9 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 func blockHandler(w http.ResponseWriter, r *http.Request) {
 	blockIDHex := r.FormValue("id")
 
-	blockMapMu.Lock()
-	defer blockMapMu.Unlock()
-
-	block, ok := blockMap[blockIDHex]
-	if !ok {
-		// xxx err
+	block, err := getBlock(blockID)
+	if err != nil {
+		// xxx
 	}
 	blockBytes, err := block.Bytes()
 	if err != nil {
@@ -175,7 +199,7 @@ func blockHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleNodeOutput(node *scp.Node, ch <-chan *scp.Msg, seckey ed25519.PrivateKey) {
+func handleNodeOutput(node *scp.Node, seckey ed25519.PrivateKey) {
 	var latest *scp.Msg
 	ticker := time.Tick(time.Second)
 
@@ -185,10 +209,14 @@ func handleNodeOutput(node *scp.Node, ch <-chan *scp.Msg, seckey ed25519.Private
 
 	for {
 		select {
-		case latest = <-ch:
-			// xxx If this is an externalize message, update the tx pool to
-			// remove published and conflicting txs; also update the state
-			// snapshot.
+		case latest = <-msgChan:
+			if ext, ok := latest.T.(*scp.ExtTopic); ok {
+				// We've externalized a block at a new height.
+				// xxx update the tx pool to remove published and conflicting txs
+
+				// Update the protocol.Chain object and anything waiting on it.
+				heightChan <- uint64(latest.I)
+			}
 
 		case <-ticker:
 			// Send only the latest protocol message (if any) to all peers
