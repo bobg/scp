@@ -16,6 +16,7 @@ import (
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
+	"github.com/golang/protobuf/proto"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/bobg/scp"
@@ -70,8 +71,6 @@ func main() {
 	node = scp.NewNode(nodeID, q, msgChan)
 	go node.Run()
 	go handleNodeOutput(node, secretKey)
-
-	nomchan = make(chan interface{}, 1)
 	go nominate(node)
 
 	http.HandleFunc("/"+pubKeyHex, protocolHandler) // scp protocol messages go here
@@ -111,9 +110,6 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 			nomChan <- msg.I + 1
 		}
 	}
-
-	// xxx if this is a commit or externalize message, might be time to
-	// start nominating for the next slot (block height).
 
 	var blockIDs scp.ValueSet
 	switch topic := msg.T.(type) {
@@ -197,6 +193,25 @@ func blockHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// xxx
 	}
+}
+
+func submitHandler(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		// xxx
+	}
+	var rawtx bc.RawTx
+	err = proto.Unmarshal(b, &tx)
+	if err != nil {
+		// xxx
+	}
+	tx, err := bc.NewTx(rawtx.Program, rawtx.Version, rawtx.Runlimit)
+	if err != nil {
+		// xxx
+	}
+	nomChan <- tx
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func handleNodeOutput(node *scp.Node, seckey ed25519.PrivateKey) {
@@ -399,6 +414,49 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 }
 
 func nominate(node *scp.Node) {
-	// xxx periodically assemble a proposed block from the pool and
-	// nominate it for the highest appropriate slot.
+	var block *bc.Block
+	var slotID
+
+	txpool := make(map[bc.Hash]*bc.Tx)
+
+	doNom := func() error {
+		txs := make([]*bc.Tx, 0, len(txpool))
+		for _, tx := range txpool {
+			txs = append(txs, tx)
+		}
+		// xxx toposort txs
+		block = chain.GenerateBlock(ctx, chain.State(), timestampMS, txs)
+		// xxx figure out which txs GenerateBlock removed as invalid, and remove them from txpool
+
+		err := storeBlock(block)
+		if err != nil {
+			return err
+		}
+		n := &scp.NomTopic{
+			X: scp.ValueSet{block.Hash()},
+		}
+		msg := scp.NewMsg(node.ID, scp.SlotID(block.Height), node.Q, n) // xxx slotID is 32 bits, block height is 64
+		node.Handle(msg)
+	}
+
+	for item := range nomChan {
+		switch item := item.(type) {
+		case *bc.Tx:
+			if _, ok := txpool[item.ID]; ok {
+				// tx is already in the pool
+				continue
+			}
+			txpool[item.ID] = item // xxx need to persist this
+			err := doNom()
+			if err != nil {
+				// xxx
+			}
+
+		case scp.SlotID:
+			err := doNom()
+			if err != nil {
+				// xxx
+			}
+		}
+	}
 }
