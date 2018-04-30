@@ -420,8 +420,6 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 }
 
 func nominate(node *scp.Node) {
-	var block *bc.Block
-
 	txpool := make(map[bc.Hash]*bc.Tx)
 
 	doNom := func() error {
@@ -429,11 +427,14 @@ func nominate(node *scp.Node) {
 		for _, tx := range txpool {
 			txs = append(txs, tx)
 		}
-		// xxx toposort txs
-		block = chain.GenerateBlock(ctx, chain.State(), timestampMS, txs)
+
+		block, _, err := chain.GenerateBlock(ctx, chain.State(), timestampMS, txs)
+		if err != nil {
+			return err
+		}
 		// xxx figure out which txs GenerateBlock removed as invalid, and remove them from txpool
 
-		err := storeBlock(block)
+		err = storeBlock(block)
 		if err != nil {
 			return err
 		}

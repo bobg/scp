@@ -38,27 +38,55 @@ func (v valtype) String() string {
 	return hex.EncodeToString(bc.Hash(v).Bytes())
 }
 
-func (v valtype) Combine(other valtype) valtype {
-	blockMapMu.Lock()
-	var (
-		// xxx what to do when we don't have the actual blocks?
-		b1 = blockMap[v]
-		b2 = blockMap[other]
-	)
-	blockMapMu.Unlock()
+func (v valtype) Combine(other valtype, slotID SlotID) valtype {
+	if other.Less(v) {
+		return other.Combine(v, slotID)
+	}
+	if !v.Less(other) {
+		// v == other
+		return v
+	}
 
-	// xxx to combine, blocks must have the same Height, PreviousBlockId,
+	b1, err := getBlock(v)
+	if err != nil {
+		// xxx
+	}
+	b2, err := getBlock(other)
+	if err != nil {
+		// xxx
+	}
+
+	if b1.Height != uint64(slotID) {
+		// xxx err
+	}
+	if b2.Height != uint64(slotID) {
+		// xxx err
+	}
 
 	txs := b1.Transactions
 	txs = append(txs, b2.Transactions...)
 	sort.Slice(txs, func(i, j int) bool {
-		if xxx /* txs[i] outputs overlap txs[j] inputs */ {
-			return true
+		s := make(map[bc.Hash]struct{})
+		for _, out := range txs[i].Outputs {
+			s[out.ID] = struct{}{}
 		}
-		if xxx /* txs[j] outputs overlap txs[i] inputs */ {
-			return false
+		for _, in := range txs[j].Inputs {
+			if _, ok := s[in.ID]; ok {
+				return true
+			}
 		}
-		return txs[i].ID < txs[j].ID
+
+		s = make(map[bc.Hash]struct{})
+		for _, out := range txs[j].Outputs {
+			s[out.ID] = struct{}{}
+		}
+		for _, in := range txs[i].Inputs {
+			if _, ok := s[in.ID]; ok {
+				return false
+			}
+		}
+
+		return valtype(txs[i].ID).Less(valtype(txs[j].ID))
 	})
 
 	// Eliminate duplicates. There should be no more than two of any
@@ -80,7 +108,20 @@ func (v valtype) Combine(other valtype) valtype {
 	}
 	txs = txs[:n]
 
-	// xxx create a new block
-	// xxx if not possible to create a new block, choose one based on
-	// blockID and slotID (which is the block height)
+	block, _, err := chain.GenerateBlock(ctx, chain.State(), timestampMS, txs)
+	if err != nil {
+		// Cannot make a block from the combined set of txs. Choose one of
+		// the input blocks as the winner.
+		if slotID%2 == 0 {
+			return v
+		}
+		return other
+	}
+
+	err = storeBlock(block)
+	if err != nil {
+		// xxx
+	}
+
+	return valtype(block.Hash())
 }
