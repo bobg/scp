@@ -129,7 +129,16 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			defer resp.Body.Close()
 
-			// xxx parse and validate block from resp
+			blockBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				// xxx
+			}
+			var block bc.Block
+			err = block.FromBytes(blockBytes)
+			if err != nil {
+				// xxx
+			}
+
 			blockMapMu.Lock()
 			blockMap[blockID] = block
 			blockMapMu.Unlock()
