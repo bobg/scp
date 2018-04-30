@@ -177,7 +177,7 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 				s.X = s.X.Union(topic.X)
 				s.X = s.X.Union(topic.Y)
 				s.updateYZ()
-				s.B.X = s.Z.Combine() // xxx does this require changing s.B.N?
+				s.B.X = s.Z.Combine(s.ID) // xxx does this require changing s.B.N?
 			}
 		}
 	} else {
@@ -403,7 +403,7 @@ func (s *Slot) setBX() {
 	if !s.H.IsZero() {
 		s.B.X = s.H.X
 	} else {
-		s.B.X = s.Z.Combine()
+		s.B.X = s.Z.Combine(s.ID)
 	}
 }
 

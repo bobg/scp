@@ -26,8 +26,12 @@ func (v valType) Less(other scp.Value) bool {
 	return v < other.(valType)
 }
 
-func (v valType) Combine(other scp.Value) scp.Value {
-	if v < other.(valType) {
+func (v valType) Combine(other scp.Value, slotID scp.SlotID) scp.Value {
+	if slotID%2 == 0 {
+		if v > other.(valType) {
+			return v
+		}
+	} else if v < other.(valType) {
 		return v
 	}
 	return other

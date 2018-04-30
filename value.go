@@ -13,7 +13,7 @@ type Value interface {
 	// Combine combines this value with another to produce a third
 	// (which may be the same as either of the inputs). The operation
 	// should be deterministic and commutative.
-	Combine(Value) Value
+	Combine(Value, SlotID) Value
 
 	// Bytes produces a byte-string representation of the value, not
 	// meant for human consumption.
@@ -34,13 +34,13 @@ func VString(v Value) string {
 
 // Combine reduces the members of vs to a single value using
 // Value.Combine. The result is nil if vs is empty.
-func (vs ValueSet) Combine() Value {
+func (vs ValueSet) Combine(slotID SlotID) Value {
 	if len(vs) == 0 {
 		return nil
 	}
 	result := vs[0]
 	for _, v := range vs[1:] {
-		result = result.Combine(v)
+		result = result.Combine(v, slotID)
 	}
 	return result
 }
