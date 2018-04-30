@@ -149,7 +149,7 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			u.Path = "/block"
-			u.RawQuery = "id=" + blockID.(valtype)
+			u.RawQuery = "id=" + blockID.(valtype).String()
 			req, err := http.NewRequest("GET", u.String(), nil)
 			if err != nil {
 				return err
@@ -314,20 +314,20 @@ func marshal(msg *scp.Msg, prv ed25519.PrivateKey) ([]byte, error) {
 		mt.Y = y
 
 	case *scp.PrepTopic:
-		mt.B = marshaledBallot{N: topic.B.N, X: topic.B.X}
-		mt.P = marshaledBallot{N: topic.P.N, X: topic.P.X}
-		mt.PP = marshaledBallot{N: topic.PP.N, X: topic.PP.X}
+		mt.B = marshaledBallot{N: topic.B.N, X: topic.B.X.(valtype).String()}
+		mt.P = marshaledBallot{N: topic.P.N, X: topic.P.X.(valtype).String()}
+		mt.PP = marshaledBallot{N: topic.PP.N, X: topic.PP.X.(valtype).String()}
 		mt.HN = topic.HN
 		mt.CN = topic.CN
 
 	case *scp.CommitTopic:
-		mt.B = marshaledBallot{N: topic.B.N, X: topic.B.X}
+		mt.B = marshaledBallot{N: topic.B.N, X: topic.B.X.(valtype).String()}
 		mt.PN = topic.PN
 		mt.HN = topic.HN
 		mt.CN = topic.CN
 
 	case *scp.ExtTopic:
-		mt.C = marshaledBallot{N: topic.C.N, topic.C.X}
+		mt.C = marshaledBallot{N: topic.C.N, topic.C.X.(valtype).String()}
 		mt.HN = topic.HN
 	}
 	mp := marshaledPayload{

@@ -1,18 +1,41 @@
 package main
 
 import (
+	"encoding/hex"
 	"sort"
 
 	"github.com/chain/txvm/protocol/bc"
 )
 
-// The concrete type for scp.Value. This network votes on hex-encoded
-// block ID strings. When a node needs to know the contents of a
-// block, it can inquire via RPC.
-type valtype string
+// The concrete type for scp.Value. This network votes on block
+// IDs. When a node needs to know the contents of a block, it can
+// inquire via RPC.
+type valtype bc.Hash
 
 func (v valtype) Less(other valtype) bool {
-	return v < other
+	if v.V0 < other.V0 {
+		return true
+	}
+	if v.V0 > other.V0 {
+		return false
+	}
+	if v.V1 < other.V1 {
+		return true
+	}
+	if v.V1 > other.V1 {
+		return false
+	}
+	if v.V2 < other.V2 {
+		return true
+	}
+	if v.V2 > other.V2 {
+		return false
+	}
+	return v.V3 < other.V3
+}
+
+func (v valtype) String() string {
+	return hex.EncodeToString(bc.Hash(v).Bytes())
 }
 
 func (v valtype) Combine(other valtype) valtype {
