@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"sync/atomic"
 	"time"
 
@@ -143,8 +144,13 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 				return nil
 			}
 
-			// xxx construct block-requesting URL (based on msg.V)
-			req, err := http.NewRequest("GET", url, nil)
+			u, err := url.Parse(msg.V)
+			if err != nil {
+				return err
+			}
+			u.Path = "/block"
+			u.RawQuery = "id=" + blockID.(valtype)
+			req, err := http.NewRequest("GET", u.String(), nil)
 			if err != nil {
 				return err
 			}
@@ -415,7 +421,6 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 
 func nominate(node *scp.Node) {
 	var block *bc.Block
-	var slotID
 
 	txpool := make(map[bc.Hash]*bc.Tx)
 
