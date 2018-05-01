@@ -14,7 +14,7 @@ func (v valtype) Less(other Value) bool {
 	return v < other.(valtype)
 }
 
-func (v valtype) Combine(other Value) Value {
+func (v valtype) Combine(other Value, _ SlotID) Value {
 	return valtype(v + other.(valtype))
 }
 

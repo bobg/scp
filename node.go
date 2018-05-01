@@ -80,11 +80,9 @@ func (n *Node) Run() {
 					func() {
 						n.mu.Lock()
 						defer n.mu.Unlock()
-						s := n.pending[cmd.slotID]
-						if s == nil {
-							continue
+						if s := n.pending[cmd.slotID]; s != nil {
+							s.deferredUpdate()
 						}
-						s.deferredUpdate()
 					}()
 				}
 
