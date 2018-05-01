@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"math/big"
+	"sync"
 	"time"
 
 	"github.com/davecgh/go-xdr/xdr"
@@ -24,6 +25,8 @@ type Node struct {
 	// include the node itself, though the node is understood to be in
 	// every slice.
 	Q []NodeIDSet
+
+	mu sync.Mutex // protects pending and ext
 
 	// pending holds Slot objects during nomination and balloting.
 	pending map[SlotID]*Slot
@@ -74,18 +77,26 @@ func (n *Node) Run() {
 					}
 
 				case *deferredUpdateCmd:
-					s := n.pending[cmd.slotID]
-					if s == nil {
-						continue
-					}
-					s.deferredUpdate()
+					func() {
+						n.mu.Lock()
+						defer n.mu.Unlock()
+						s := n.pending[cmd.slotID]
+						if s == nil {
+							continue
+						}
+						s.deferredUpdate()
+					}()
 				}
 
 			case <-timer.C:
-				err := n.ping()
-				if err != nil {
-					n.Logf("ERROR %s", err)
-				}
+				func() {
+					n.mu.Lock()
+					defer n.mu.Unlock()
+					err := n.ping()
+					if err != nil {
+						n.Logf("ERROR %s", err)
+					}
+				}()
 			}
 		}
 	}()
@@ -171,7 +182,7 @@ var ErrNoPrev = errors.New("no previous value")
 // G produces a node- and slot-specific 32-byte hash for a given
 // message m. It is an error to call this on slot i>1 before n has
 // externalized a value for slot i-1.
-func (n *Node) G(i SlotID, m []byte) (result [32]byte, err error) {
+func (n *Node) G(i SlotID, m []byte) (result [32]byte, err error) { // xxx unexport
 	hasher := sha256.New()
 
 	var prevValBytes []byte
@@ -271,6 +282,27 @@ func (n *Node) Priority(i SlotID, num int, nodeID NodeID) ([32]byte, error) {
 	m.Write(numBytes)
 	m.WriteString(string(nodeID))
 	return n.G(i, m.Bytes())
+}
+
+// AllKnown gives the complete set of reachable node IDs, excluding
+// n.ID.
+func (n *Node) AllKnown() NodeIDSet {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	var result NodeIDSet
+	for _, slice := range n.Q {
+		result = result.Union(slice)
+	}
+	for _, s := range n.pending {
+		for _, msg := range s.M {
+			for _, slice := range msg.Q {
+				result = result.Union(slice)
+			}
+		}
+	}
+	result = result.Remove(n.ID)
+	return result
 }
 
 // Logf produces log output prefixed with the node's identity.
