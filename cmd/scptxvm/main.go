@@ -20,7 +20,6 @@ import (
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/golang/protobuf/proto"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/bobg/scp"
 )
@@ -181,49 +180,47 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 		blockIDs = blockIDs.Add(topic.C.X)
 	}
 
-	var c http.Client
-
-	g, ctx := errgroup.WithContext(r.Context())
+	// Request the contents of unknown blocks.
+	var unknownBlockIDs []string
 	for _, blockID := range blockIDs {
-		blockID := blockID
-		g.Go(func() error {
-			if haveBlock(blockID) {
-				return nil
-			}
-
-			u, err := url.Parse(msg.V)
-			if err != nil {
-				return err
-			}
-			u.Path = "/block"
-			u.RawQuery = fmt.Sprintf("height=%d&id=%x", msg.I, blockID.(valtype).String())
-			req, err := http.NewRequest("GET", u.String(), nil)
-			if err != nil {
-				return err
-			}
-			req = req.WithContext(r.Context())
-			resp, err := c.Do(req)
-			if err != nil {
-				return err
-			}
-			defer resp.Body.Close()
-
-			blockBytes, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				// xxx
-			}
-			var block bc.Block
-			err = block.FromBytes(blockBytes)
-			if err != nil {
-				// xxx
-			}
-
-			return storeBlock(block)
-		})
+		blockID := bc.Hash(blockID.(valtype))
+		have, err := haveBlock(msg.I, blockID.(valtype))
+		if err != nil {
+			httperr(w, http.StatusInternalServerError, "could not check for block file: %s", err)
+			return
+		}
+		if have {
+			continue
+		}
+		unknownBlockIDs = append(unknownBlockIDs, blockID.String())
 	}
-	err = g.Wait()
-	if err != nil {
-		// xxx
+	if len(unknownBlockIDs) > 0 {
+		u, err := url.Parse(msg.V)
+		if err != nil {
+			httperr(w, http.StatusBadRequest, "sending node ID (%s) cannot be parsed as a URL: %s", msg.V, err)
+			return
+		}
+		u.Path = "/blocks"
+		body, err := json.Marshal(unknownBlockIDs)
+		if err != nil {
+			httperr(w, http.StatusInternalServerError, "cannot construct POST body: %s", err)
+			return
+		}
+		req, err := http.NewRequest("POST", u.String(), bytes.NewReader(body))
+		if err != nil {
+			httperr(w, http.StatusInternalServerError, "building POST request: %s", err)
+			return
+		}
+		req = req.WithContext(r.Context())
+		var c http.Client
+		resp, err := c.Do(req)
+		if err != nil {
+			httperr(w, http.StatusInternalServerError, "requesting block contents: %s", err)
+			return
+		}
+		// xxx parse the response
+		// xxx make sure all requested blocks are included
+		// xxx store the blocks locally
 	}
 
 	node.Handle(msg)

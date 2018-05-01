@@ -95,6 +95,18 @@ func getBlock(height int, id bc.Hash) (*bc.Block, err) {
 	return readBlockFile(blockFilename(height, id))
 }
 
+func haveBlock(height int, id bc.Hash) (bool, err) {
+	filename := blockFilename(height, id)
+	_, err := os.Stat(filename)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 func readBlockFile(filename string) (*bc.Block, err) {
 	bits, err := ioutil.ReadFile(filename)
 	if err != nil {
