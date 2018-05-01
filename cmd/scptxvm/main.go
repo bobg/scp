@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
@@ -31,14 +32,30 @@ var (
 	heightChan = make(chan uint64, 1)
 	nomChan    = make(chan interface{}, 1)
 	msgChan    = make(chan *scp.Msg, 1)
+
+	prv ed25519.PrivateKey
 )
 
 func main() {
-	secretKeyHex := flag.String("seckey", "", "secret key hex")
-	addr := flag.String("addr", "", "listen address (host:port)")
+	confFile := flag.String("conf", "conf.toml", "config file")
 	dir := flag.String("dir", ".", "root of working dir")
 
 	flag.Parse()
+
+	confBits, err := ioutil.ReadFile(*confFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var conf struct {
+		Addr string
+		Prv  string
+		Q    [][]string
+	}
+	_, err = toml.Decode(string(confBits), &conf)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	store := &pstore{
 		height:   height,
@@ -55,25 +72,32 @@ func main() {
 		log.Fatal(err)
 	}
 
-	secretKeyBytes, err := hex.DecodeString()
+	prvBits, err := hex.DecodeString(conf.Prv)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if len(secretKey) != ed25519.PrivateKeySize {
-		log.Fatalf("secret key is %d bytes long, want %d bytes", len(secretKey), ed25519.PrivateKeySize)
+	if len(prvBits) != ed25519.PrivateKeySize {
+		log.Fatalf("prv is %d bytes long, want %d bytes", len(prvBits), ed25519.PrivateKeySize)
 	}
-	var (
-		secretKey = ed25519.PrivateKey(secretKeyBytes)
-		pubKey    = secretKey.Public().(ed25519.PublicKey)
-		pubKeyHex = hex.EncodeToString(pubKey)
-	)
+	prv = ed25519.PrivateKey(prvBits)
+	pubKey := prv.Public().(ed25519.PublicKey)
+	pubKeyHex := hex.EncodeToString(pubKey)
 
-	nodeID := fmt.Sprintf("http://%s/%x", *addr, pubKey)
+	nodeID := fmt.Sprintf("http://%s/%s", conf.Addr, pubKeyHex)
+
+	var q []scp.NodeIDSet
+	for _, slice := range conf.Q {
+		var s scp.NodeIDSet
+		for _, id := range slice {
+			s = s.Add(id)
+		}
+		q = append(q, s)
+	}
 
 	node = scp.NewNode(nodeID, q, msgChan)
 	go node.Run()
-	go handleNodeOutput(node, secretKey)
-	go nominate(node)
+	go handleNodeOutput()
+	go nominate()
 
 	http.HandleFunc("/"+pubKeyHex, protocolHandler) // scp protocol messages go here
 	http.HandleFunc("/block", blockHandler)         // nodes resolve block ids here
@@ -230,7 +254,7 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func handleNodeOutput(node *scp.Node, seckey ed25519.PrivateKey) {
+func handleNodeOutput() {
 	var latest *scp.Msg
 	ticker := time.Tick(time.Second)
 
@@ -257,7 +281,7 @@ func handleNodeOutput(node *scp.Node, seckey ed25519.PrivateKey) {
 			}
 			var (
 				msg  = latest
-				pmsg = marshal(msg, seckey)
+				pmsg = marshal(msg)
 			)
 			latest = nil
 			for _, peerID := range node.Peers() {
@@ -306,7 +330,7 @@ type (
 	}
 )
 
-func marshal(msg *scp.Msg, prv ed25519.PrivateKey) ([]byte, error) {
+func marshal(msg *scp.Msg) ([]byte, error) {
 	var q [][]string
 	for _, slice := range msg.Q {
 		var qslice []string
@@ -429,7 +453,7 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 	return msg, nil
 }
 
-func nominate(node *scp.Node) {
+func nominate() {
 	txpool := make(map[bc.Hash]*bc.Tx)
 
 	doNom := func() error {

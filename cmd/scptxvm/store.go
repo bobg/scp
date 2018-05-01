@@ -103,7 +103,15 @@ func storeBlock(block *bc.Block) error {
 	defer storeBlockMu.Unlock()
 
 	filename := blockFilename(block.Height, block.Hash())
-	// xxx if the file exists, return nil
+	_, err := os.Stat(filename)
+	if err == nil {
+		// File exists already.
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		// Problem is other than file-doesn't-exist.
+		return err
+	}
 	bits, err := block.Bytes()
 	if err != nil {
 		return err
