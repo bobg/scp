@@ -137,7 +137,7 @@ func subscribe() {
 					panic(err) // xxx err
 				}
 				u.Path = "/subscribe"
-				u.RawQuery = fmt.Sprintf("max=%d", highestExt)
+				u.RawQuery = fmt.Sprintf("subscriber=%s&max=%d", url.QueryEscape(node.ID), highestExt)
 				resp, err := http.Get(u.String())
 				if err != nil {
 					node.Logf("ERROR: cannot subscribe to %s: %s", other, err)

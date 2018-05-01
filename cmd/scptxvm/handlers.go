@@ -7,7 +7,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/bobg/scp"
 
@@ -217,6 +219,42 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	nomChan <- tx
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func subscribeHandler(w http.ResponseWriter, r *http.Request) {
+	subscriber := r.FormValue("subscriber")
+	maxStr := r.FormValue("max")
+	max, err := strconv.Atoi(maxStr)
+	if err != nil {
+		httperr(w, http.StatusBadRequest, "cannot parse max value: %s", err)
+		return
+	}
+
+	subscribersMu.Lock()
+	subscribers[subscriber] = time.Now()
+	subscribersMu.Unlock()
+
+	msgs := node.MsgsSince(max)
+	var resp []json.RawMessage
+	for _, msg := range msgs {
+		bits, err := marshal(msg)
+		if err != nil {
+			httperr(w, http.StatusInternalServerError, "marshaling response: %s", err)
+			return
+		}
+		resp = append(resp, bits)
+	}
+	respBits, err := json.Marshal(resp)
+	if err != nil {
+		httperr(w, http.StatusInternalServerError, "marshaling response: %s", err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, err = w.Write(respBits)
+	if err != nil {
+		httperr(w, http.StatusInternalServerError, "writing response: %s", err)
+		return
+	}
 }
 
 func httperr(w http.ResponseWriter, code int, format string, args ...interface{}) {

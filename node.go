@@ -303,6 +303,34 @@ func (n *Node) AllKnown() NodeIDSet {
 	return result
 }
 
+// MsgsSince returns all this node's messages with slotID > since.
+func (n *Node) MsgsSince(since SlotID) []*Msg {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	var result []*Msg
+
+	for slotID, topic := range ext {
+		if slotID <= since {
+			continue
+		}
+		msg := &Msg{
+			V: n.ID,
+			I: slotID,
+			Q: n.Q,
+			T: topic,
+		}
+		result = append(result, msg)
+	}
+	for slotID, slot := range n.pending {
+		if slotID <= since {
+			continue
+		}
+		result = append(result, slot.Msg())
+	}
+	return result
+}
+
 // Logf produces log output prefixed with the node's identity.
 func (n *Node) Logf(f string, a ...interface{}) {
 	f = "node %s: " + f

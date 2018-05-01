@@ -3,9 +3,16 @@ package main
 import (
 	"bytes"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/bobg/scp"
+)
+
+var (
+	// Value is when the subscriber subscribed.
+	subscribers   = make(map[scp.NodeID]time.Time)
+	subscribersMu sync.Mutex
 )
 
 func handleNodeOutput() {
@@ -29,27 +36,36 @@ func handleNodeOutput() {
 
 		case <-ticker:
 			// Send only the latest protocol message (if any) to all peers
-			// no more than once per second.
+			// and subscribers no more than once per second.
 			if latest != nil {
 				continue
 			}
-			var (
-				msg  = latest
-				pmsg = marshal(msg)
-			)
+			msg := latest
+			pmsg := marshal(msg)
 			latest = nil
-			for _, peerID := range node.Peers() {
-				peerID := peerID
+
+			others := node.Peers()
+			subscribersMu.Lock()
+			for other := range subscribers {
+				others = others.Add(other)
+			}
+			subscribersMu.Unlock()
+
+			for _, other := range others {
+				other := other
 				go func() {
-					resp, err := http.Post(peerID, xxxcontenttype, bytes.NewReader(pmsg))
+					resp, err := http.Post(other, "application/octet-stream", bytes.NewReader(pmsg))
 					if err != nil {
-						node.Logf("posting message %s to %s: %s", msg, peerID, err)
-						return
+						node.Logf("could not send protocol message to %s: %s", other, err)
+						subscribersMu.Lock()
+						delete(subscribers, other)
+						subscribersMu.Unlock()
 					}
-					defer resp.Body.Close()
 					if resp.StatusCode/100 != 2 {
-						node.Logf("unexpected response posting message %s to %s: %s", msg, peerID, resp.Status)
-						return
+						node.Logf("unexpected status code %d sending protocol message to %s", resp.StatusCode, other)
+						subscribersMu.Lock()
+						delete(subscribers, other)
+						subscribersMu.Unlock()
 					}
 				}()
 			}
