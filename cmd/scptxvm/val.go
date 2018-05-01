@@ -49,11 +49,11 @@ func (v valtype) Combine(other valtype, slotID SlotID) valtype {
 
 	b1, err := getBlock(slotID, v)
 	if err != nil {
-		// xxx
+		panic(err) // xxx is this OK?
 	}
 	b2, err := getBlock(slotID, other)
 	if err != nil {
-		// xxx
+		panic(err) // xxx
 	}
 
 	txs := b1.Transactions
@@ -113,7 +113,7 @@ func (v valtype) Combine(other valtype, slotID SlotID) valtype {
 
 	err = storeBlock(block)
 	if err != nil {
-		// xxx
+		panic(err)
 	}
 
 	return valtype(block.Hash())

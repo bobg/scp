@@ -34,13 +34,18 @@ var (
 	msgChan    = make(chan *scp.Msg, 1)
 
 	prv ed25519.PrivateKey
+
+	dir string
 )
 
 func main() {
 	confFile := flag.String("conf", "conf.toml", "config file")
-	dir := flag.String("dir", ".", "root of working dir")
+	dirFlag := flag.String("dir", ".", "root of working dir")
+	initialBlockFile := flag.String("initial", "", "file containing initial block")
 
 	flag.Parse()
+
+	dir = *dirFlag
 
 	confBits, err := ioutil.ReadFile(*confFile)
 	if err != nil {
@@ -57,17 +62,27 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if *initialBlockFile == "" {
+		log.Fatal("must specify -initial")
+	}
+	initialBlockBits, err := ioutil.ReadFile(*initialBlockFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var initialBlock bc.Block
+	err = initialBlock.FromBytes(initialBlockBits)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	store := &pstore{
 		height:   height,
-		dir:      *dir,
 		snapshot: snapshot,
 	}
 
 	heightChan = make(chan uint64)
 
-	var err error
-
-	chain, err = protocol.NewChain(ctx, initialBlock, store, heightChan)
+	chain, err = protocol.NewChain(ctx, &initialBlock, store, heightChan)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -108,17 +123,24 @@ func main() {
 }
 
 func protocolHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		httperr(w, http.StatusBadRequest, "%s not supported", r.Method)
+		return
+	}
 	if r.Body == nil {
-		// xxx err
+		httperr(w, http.StatusBadRequest, "missing POST body")
+		return
 	}
 	defer r.Body.Close()
 	pmsg, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		// xxx
+		httperr(w, http.StatusInternalServerError, "could not read POST body: %s", err)
+		return
 	}
 	msg, err := unmarshal(pmsg)
 	if err != nil {
-		// xxx
+		httperr(w, http.StatusBadRequest, "could not parse POST body: %s", err)
+		return
 	}
 
 	nh := atomic.LoadInt32(&nomHeight)
@@ -499,4 +521,10 @@ func nominate() {
 			}
 		}
 	}
+}
+
+func httperr(w http.ResponseWriter, code int, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	node.Logf("http response %d: %s", code, msg)
+	http.Error(w, msg, code)
 }
