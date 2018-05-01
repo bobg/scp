@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -27,14 +26,12 @@ import (
 var (
 	chain *protocol.Chain
 	node  *scp.Node
+	prv   ed25519.PrivateKey
+	dir   string
 
 	heightChan = make(chan uint64, 1)
 	nomChan    = make(chan interface{}, 1)
 	msgChan    = make(chan *scp.Msg, 1)
-
-	prv ed25519.PrivateKey
-
-	dir string
 )
 
 func main() {
@@ -114,11 +111,17 @@ func main() {
 	go nominate()
 
 	http.HandleFunc("/"+pubKeyHex, protocolHandler) // scp protocol messages go here
-	http.HandleFunc("/block", blockHandler)         // nodes resolve block ids here
+	http.HandleFunc("/blocks", blocksHandler)       // nodes resolve block ids here
 	http.HandleFunc("/submit", submitHandler)       // new txs get proposed here
+	http.HandleFunc("/shutdown", shutdownHandler)
 
 	node.Logf("listening on %s", *addr)
 	http.ListenAndServe(*addr, nil)
+}
+
+type blocksReq struct {
+	Height   int
+	BlockIDs []bc.Hash
 }
 
 func protocolHandler(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +161,7 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Collect all block IDs mentioned in the new message.
 	var blockIDs scp.ValueSet
 	switch topic := msg.T.(type) {
 	case *scp.NomTopic:
@@ -180,11 +184,11 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 		blockIDs = blockIDs.Add(topic.C.X)
 	}
 
-	// Request the contents of unknown blocks.
-	var unknownBlockIDs []string
+	// Request the contents of any unknown blocks.
+	req := blocksReq{Height: msg.I}
 	for _, blockID := range blockIDs {
 		blockID := bc.Hash(blockID.(valtype))
-		have, err := haveBlock(msg.I, blockID.(valtype))
+		have, err := haveBlock(msg.I, blockID)
 		if err != nil {
 			httperr(w, http.StatusInternalServerError, "could not check for block file: %s", err)
 			return
@@ -192,16 +196,16 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 		if have {
 			continue
 		}
-		unknownBlockIDs = append(unknownBlockIDs, blockID.String())
+		req.BlockIDs = append(req.BlockIDs, blockID)
 	}
-	if len(unknownBlockIDs) > 0 {
+	if len(req.Blocks) > 0 {
 		u, err := url.Parse(msg.V)
 		if err != nil {
 			httperr(w, http.StatusBadRequest, "sending node ID (%s) cannot be parsed as a URL: %s", msg.V, err)
 			return
 		}
 		u.Path = "/blocks"
-		body, err := json.Marshal(unknownBlockIDs)
+		body, err := json.Marshal(req)
 		if err != nil {
 			httperr(w, http.StatusInternalServerError, "cannot construct POST body: %s", err)
 			return
@@ -212,62 +216,108 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		req = req.WithContext(r.Context())
+		req.Header.Set("Content-Type", "application/json")
 		var c http.Client
 		resp, err := c.Do(req)
 		if err != nil {
 			httperr(w, http.StatusInternalServerError, "requesting block contents: %s", err)
 			return
 		}
-		// xxx parse the response
-		// xxx make sure all requested blocks are included
-		// xxx store the blocks locally
+		// xxx check status code and content-type
+		defer resp.Body.Close()
+		respBits, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			httperr(w, http.StatusInternalServerError, "reading response: %s", err)
+			return
+		}
+		var blocks []*bc.Block
+		err = json.Unmarshal(respBits, &blocks)
+		if err != nil {
+			httperr(w, http.StatusInternalServerError, "parsing response: %s", err)
+			return
+		}
+		// xxx check all requested blocks are present
+		for _, block = range blocks {
+			err = storeBlock(block)
+			if err != nil {
+				httperr(w, http.StatusInternalServerError, "storing block: %s", err)
+				return
+			}
+		}
 	}
 
 	node.Handle(msg)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func blockHandler(w http.ResponseWriter, r *http.Request) {
-	heightStr := r.FormValue("height")
-	height, err := strconv.Atoi(heightStr)
-	if err != nil {
-		// xxx
+func blocksHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		httperr(w, http.StatusBadRequest, "%s not supported", r.Method)
+		return
 	}
-	blockIDHex := r.FormValue("id")
-	blockID, err := hex.DecodeString(blockIDHex)
-	if err != nil {
-		// xxx
+	if r.Body == nil {
+		httperr(w, http.StatusBadRequest, "missing POST body")
+		return
 	}
-
-	block, err := getBlock(height, blockID)
+	defer r.Body.Close()
+	reqBits, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		// xxx
+		httperr(w, http.StatusInternalServerError, "reading request: %s", err)
+		return
 	}
-	blockBytes, err := block.Bytes()
+	var req blocksReq
+	err = json.Unmarshal(reqBits, &req)
 	if err != nil {
-		// xxx
+		httperr(w, http.StatusBadRequest, "parsing request: %s", err)
+		return
 	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	_, err = w.Write(blockBytes)
+	var result []*bc.Block
+	for _, blockID := range req.BlockIDs {
+		block, err := getBlock(req.Height, blockID)
+		if err != nil {
+			httperr(w, http.StatusNotFound, "could not resolve requested block %s (height %d): %s", blockID, req.Height, err)
+			return
+		}
+		result = append(result, block)
+	}
+	respBits, err := json.Marshal(result)
 	if err != nil {
-		// xxx
+		httperr(w, http.StatusInternalServerError, "could not marshal response: %s", err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, err = w.Write(respBits)
+	if err != nil {
+		httperr(w, http.StatusInternalServerError, "could not write response: %s", err)
+		return
 	}
 }
 
 func submitHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		httperr(w, http.StatusBadRequest, "%s not supported", r.Method)
+		return
+	}
+	if r.Body == nil {
+		httperr(w, http.StatusBadRequest, "missing POST body")
+		return
+	}
 	defer r.Body.Close()
-	b, err := ioutil.ReadAll(r.Body)
+	reqBits, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		// xxx
+		httperr(w, http.StatusInternalServerError, "reading request: %s", err)
+		return
 	}
 	var rawtx bc.RawTx
-	err = proto.Unmarshal(b, &tx)
+	err = proto.Unmarshal(reqBits, &tx)
 	if err != nil {
-		// xxx
+		httperr(w, http.StatusBadRequest, "parsing request: %s", err)
+		return
 	}
 	tx, err := bc.NewTx(rawtx.Program, rawtx.Version, rawtx.Runlimit)
 	if err != nil {
-		// xxx
+		httperr(w, http.StatusBadRequest, "validating transaction: %s", err)
+		return
 	}
 	nomChan <- tx
 	w.WriteHeader(http.StatusNoContent)
@@ -476,6 +526,10 @@ func nominate() {
 	txpool := make(map[bc.Hash]*bc.Tx)
 
 	doNom := func() error {
+		if len(txpool) == 0 {
+			return nil
+		}
+
 		txs := make([]*bc.Tx, 0, len(txpool))
 		for _, tx := range txpool {
 			txs = append(txs, tx)
@@ -508,13 +562,13 @@ func nominate() {
 			txpool[item.ID] = item // xxx need to persist this
 			err := doNom()
 			if err != nil {
-				// xxx
+				panic(err) // xxx
 			}
 
 		case scp.SlotID:
 			err := doNom()
 			if err != nil {
-				// xxx
+				panic(err) // xxx
 			}
 		}
 	}
