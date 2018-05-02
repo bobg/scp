@@ -17,7 +17,7 @@ type (
 	}
 
 	marshaledPayload struct {
-		C int
+		C int32
 		V string
 		I int
 		Q [][]string
@@ -42,7 +42,7 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 	for _, slice := range msg.Q {
 		var qslice []string
 		for _, id := range slice {
-			qslice = append(qslice, id)
+			qslice = append(qslice, string(id))
 		}
 		q = append(q, qslice)
 	}
@@ -74,7 +74,7 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 		mt.CN = topic.CN
 
 	case *scp.ExtTopic:
-		mt.C = marshaledBallot{N: topic.C.N, topic.C.X.(valtype).String()}
+		mt.C = marshaledBallot{N: topic.C.N, X: topic.C.X.(valtype).String()}
 		mt.HN = topic.HN
 	}
 	mp := marshaledPayload{
@@ -122,7 +122,7 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 	}
 
 	var topic scp.Topic
-	switch mp.T.Type {
+	switch mp.T.(type) {
 	case scp.PhNom:
 		topic = &scp.NomTopic{
 			X: x,

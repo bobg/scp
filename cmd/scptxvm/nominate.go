@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
+
 	"github.com/bobg/scp"
 	"github.com/chain/txvm/protocol/bc"
 )
 
-func nominate() {
+func nominate(ctx context.Context) {
+	defer wg.Done()
+
 	txpool := make(map[bc.Hash]*bc.Tx)
 
 	doNom := func() error {
@@ -35,41 +39,47 @@ func nominate() {
 		node.Handle(msg)
 	}
 
-	for item := range nomChan {
-		switch item := item.(type) {
-		case *bc.Tx:
-			if _, ok := txpool[item.ID]; ok {
-				// tx is already in the pool
-				continue
-			}
-			txpool[item.ID] = item // xxx need to persist this
-			err := doNom()
-			if err != nil {
-				panic(err) // xxx
-			}
+	for {
+		select {
+		case <-ctx.Done():
+			return
 
-		case scp.SlotID:
-			err := doNom()
-			if err != nil {
-				panic(err) // xxx
-			}
-
-		case *bc.Block:
-			// Remove published and conflicting txs from txpool.
-			spent := make(map[bc.Hash]struct{})
-			for _, tx := range item.Transactions {
-				for _, inp := range tx.Inputs {
-					spent[inp.ID] = struct{}{}
+		case item := <-nomChan:
+			switch item := item.(type) {
+			case *bc.Tx:
+				if _, ok := txpool[item.ID]; ok {
+					// tx is already in the pool
+					continue
 				}
-				// Published tx.
-				delete(txpool, tx.ID)
-			}
-			for id, tx := range txpool {
-				for _, inp := range tx.Inputs {
-					if _, ok := spent[inp.ID]; ok {
-						// Conflicting tx.
-						delete(txpool, id)
-						break
+				txpool[item.ID] = item // xxx need to persist this
+				err := doNom()
+				if err != nil {
+					panic(err) // xxx
+				}
+
+			case scp.SlotID:
+				err := doNom()
+				if err != nil {
+					panic(err) // xxx
+				}
+
+			case *bc.Block:
+				// Remove published and conflicting txs from txpool.
+				spent := make(map[bc.Hash]struct{})
+				for _, tx := range item.Transactions {
+					for _, inp := range tx.Inputs {
+						spent[inp.ID] = struct{}{}
+					}
+					// Published tx.
+					delete(txpool, tx.ID)
+				}
+				for id, tx := range txpool {
+					for _, inp := range tx.Inputs {
+						if _, ok := spent[inp.ID]; ok {
+							// Conflicting tx.
+							delete(txpool, id)
+							break
+						}
 					}
 				}
 			}

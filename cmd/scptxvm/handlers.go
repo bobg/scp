@@ -257,6 +257,11 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func shutdownHandler(w http.ResponseWriter, r *http.Request) {
+	srv.Shutdown(bgctx)
+	bgcancel()
+}
+
 func httperr(w http.ResponseWriter, code int, format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	node.Logf("http response %d: %s", code, msg)

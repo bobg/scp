@@ -3,6 +3,7 @@ package scp
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"log"
@@ -57,12 +58,16 @@ const idleInterval = time.Second
 
 // Go processes incoming events for the node. It never returns and
 // should be launched as a goroutine.
-func (n *Node) Run() {
+func (n *Node) Run(ctx context.Context) {
 	go func() {
 		for {
 			timer := time.NewTimer(idleInterval)
 
 			select {
+			case <-ctx.Done():
+				n.Logf("context canceled, Run exiting")
+				return
+
 			case cmd := <-n.recv:
 				// Not idle.
 				if !timer.Stop() {

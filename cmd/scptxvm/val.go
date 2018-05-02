@@ -13,7 +13,8 @@ import (
 // inquire via RPC.
 type valtype bc.Hash
 
-func (v valtype) Less(other valtype) bool {
+func (v valtype) Less(otherval scp.Value) bool {
+	other := otherval.(valtype)
 	if v.V0 < other.V0 {
 		return true
 	}
@@ -43,7 +44,7 @@ func (v valtype) String() string {
 	return hex.EncodeToString(bc.Hash(v).Bytes())
 }
 
-func (v valtype) Combine(otherval scp.Value, slotID scp.SlotID) valtype {
+func (v valtype) Combine(otherval scp.Value, slotID scp.SlotID) scp.Value {
 	other := otherval.(valtype)
 	if other.Less(v) {
 		return other.Combine(v, slotID)

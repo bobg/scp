@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -15,12 +16,17 @@ var (
 	subscribersMu sync.Mutex
 )
 
-func handleNodeOutput() {
+func handleNodeOutput(ctx context.Context) {
+	defer wg.Done()
+
 	var latest *scp.Msg
 	ticker := time.Tick(time.Second)
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
+
 		case latest = <-msgChan:
 			if ext, ok := latest.T.(*scp.ExtTopic); ok {
 				// We've externalized a block at a new height.
@@ -56,14 +62,21 @@ func handleNodeOutput() {
 			for _, other := range others {
 				other := other
 				go func() {
-					resp, err := http.Post(other, "application/octet-stream", bytes.NewReader(pmsg))
+					req, err := http.NewRequest("POST", other, bytes.NewReader(pmsg))
+					if err != nil {
+						node.Logf("error constructing protocol request to %s: %s", other, err)
+						return
+					}
+					req = req.WithContext(ctx)
+					req.Header.Set("Content-Type", "application/octet-stream")
+					var c http.Client
+					resp, err := c.Do(req)
 					if err != nil {
 						node.Logf("could not send protocol message to %s: %s", other, err)
 						subscribersMu.Lock()
 						delete(subscribers, other)
 						subscribersMu.Unlock()
-					}
-					if resp.StatusCode/100 != 2 {
+					} else if resp.StatusCode/100 != 2 {
 						node.Logf("unexpected status code %d sending protocol message to %s", resp.StatusCode, other)
 						subscribersMu.Lock()
 						delete(subscribers, other)
