@@ -310,7 +310,7 @@ func (n *Node) MsgsSince(since SlotID) []*Msg {
 
 	var result []*Msg
 
-	for slotID, topic := range ext {
+	for slotID, topic := range n.ext {
 		if slotID <= since {
 			continue
 		}

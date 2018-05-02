@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/bobg/scp"
-
 	"github.com/chain/txvm/protocol/bc"
 )
 
@@ -53,6 +52,26 @@ func nominate() {
 			err := doNom()
 			if err != nil {
 				panic(err) // xxx
+			}
+
+		case *bc.Block:
+			// Remove published and conflicting txs from txpool.
+			spent := make(map[bc.Hash]struct{})
+			for _, tx := range item.Transactions {
+				for _, inp := range tx.Inputs {
+					spent[inp.ID] = struct{}{}
+				}
+				// Published tx.
+				delete(txpool, tx.ID)
+			}
+			for id, tx := range txpool {
+				for _, inp := range tx.Inputs {
+					if _, ok := spent[inp.ID]; ok {
+						// Conflicting tx.
+						delete(txpool, id)
+						break
+					}
+				}
 			}
 		}
 	}
