@@ -20,7 +20,7 @@ type pstore struct {
 }
 
 func (s pstore) Height(_ context.Context) (uint64, error) {
-	return s.height
+	return s.height, nil
 }
 
 func (s pstore) GetBlock(_ context.Context, height uint64) (*bc.Block, error) {
@@ -45,7 +45,7 @@ func (s pstore) LatestSnapshot(ctx context.Context) (*state.Snapshot, error) {
 	if highest <= 0 {
 		return state.Empty(), nil
 	}
-	filename = path.Join(snapshotDir(), strconv.Itoa(highest))
+	filename := path.Join(snapshotDir(), strconv.Itoa(highest))
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func (s pstore) SaveBlock(ctx context.Context, block *bc.Block) error {
 	if err != nil {
 		return err
 	}
-	oldName := blockFilename(block.Height, block.Hash())
+	oldName := blockFilename(int(block.Height), block.Hash()) // xxx uint64->int
 	newName := path.Join(blockDir(), strconv.FormatUint(block.Height, 10))
 	err = os.Link(oldName, newName)
 	if os.IsExist(err) {
@@ -111,7 +111,7 @@ func readBlockFile(filename string) (*bc.Block, error) {
 		return nil, err
 	}
 	var block bc.Block
-	err = block.FromBytes(b)
+	err = block.FromBytes(bits)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func storeBlock(block *bc.Block) error {
 	storeBlockMu.Lock()
 	defer storeBlockMu.Unlock()
 
-	filename := blockFilename(block.Height, block.Hash())
+	filename := blockFilename(int(block.Height), block.Hash()) // xxx uint64->int
 	_, err := os.Stat(filename)
 	if err == nil {
 		// File exists already.
@@ -138,7 +138,7 @@ func storeBlock(block *bc.Block) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(filename, block.Bytes(), 0644)
+	return ioutil.WriteFile(filename, bits, 0644)
 }
 
 func blockDir() string {

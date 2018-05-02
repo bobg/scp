@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/bobg/scp"
-
 	"github.com/chain/txvm/crypto/ed25519"
+	"github.com/chain/txvm/protocol/bc"
 )
 
 type (
@@ -29,14 +29,14 @@ type (
 
 	marshaledTopic struct {
 		Type        int // scp.Phase values
-		X, Y        []string
+		X, Y        []bc.Hash
 		B, C, P, PP marshaledBallot
 		PN, HN, CN  int
 	}
 
 	marshaledBallot struct {
 		N int
-		X string
+		X bc.Hash
 	}
 )
 
@@ -53,31 +53,31 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 	var mt marshaledTopic
 	switch topic := msg.T.(type) {
 	case *scp.NomTopic:
-		var x, y []string
+		var x, y []bc.Hash
 		for _, val := range topic.X {
-			x = append(x, val)
+			x = append(x, bc.Hash(val.(valtype)))
 		}
 		for _, val := range topic.Y {
-			y = append(y, val)
+			y = append(y, bc.Hash(val.(valtype)))
 		}
 		mt.X = x
 		mt.Y = y
 
 	case *scp.PrepTopic:
-		mt.B = marshaledBallot{N: topic.B.N, X: topic.B.X.(valtype).String()}
-		mt.P = marshaledBallot{N: topic.P.N, X: topic.P.X.(valtype).String()}
-		mt.PP = marshaledBallot{N: topic.PP.N, X: topic.PP.X.(valtype).String()}
+		mt.B = marshaledBallot{N: topic.B.N, X: bc.Hash(topic.B.X.(valtype))}
+		mt.P = marshaledBallot{N: topic.P.N, X: bc.Hash(topic.P.X.(valtype))}
+		mt.PP = marshaledBallot{N: topic.PP.N, X: bc.Hash(topic.PP.X.(valtype))}
 		mt.HN = topic.HN
 		mt.CN = topic.CN
 
 	case *scp.CommitTopic:
-		mt.B = marshaledBallot{N: topic.B.N, X: topic.B.X.(valtype).String()}
+		mt.B = marshaledBallot{N: topic.B.N, X: bc.Hash(topic.B.X.(valtype))}
 		mt.PN = topic.PN
 		mt.HN = topic.HN
 		mt.CN = topic.CN
 
 	case *scp.ExtTopic:
-		mt.C = marshaledBallot{N: topic.C.N, X: topic.C.X.(valtype).String()}
+		mt.C = marshaledBallot{N: topic.C.N, X: bc.Hash(topic.C.X.(valtype))}
 		mt.HN = topic.HN
 	}
 	mp := marshaledPayload{
@@ -97,6 +97,13 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 		S: hex.EncodeToString(sig),
 	}
 	return json.Marshal(m)
+}
+
+func unmarshalBallot(mb marshaledBallot) scp.Ballot {
+	return scp.Ballot{
+		N: mb.N,
+		X: valtype(mb.X),
+	}
 }
 
 func unmarshal(b []byte) (*scp.Msg, error) {
@@ -143,6 +150,13 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 	var topic scp.Topic
 	switch scp.Phase(mp.T.Type) {
 	case scp.PhNom:
+		var x, y scp.ValueSet
+		for _, v := range mp.T.X {
+			x = append(x, valtype(v))
+		}
+		for _, v := range mp.T.Y {
+			y = append(y, valtype(v))
+		}
 		topic = &scp.NomTopic{
 			X: x,
 			Y: y,
@@ -150,16 +164,16 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 
 	case scp.PhPrep:
 		topic = &scp.PrepTopic{
-			B:  b,
-			P:  p,
-			PP: pp,
+			B:  unmarshalBallot(mp.T.B),
+			P:  unmarshalBallot(mp.T.P),
+			PP: unmarshalBallot(mp.T.PP),
 			HN: mp.T.HN,
 			CN: mp.T.CN,
 		}
 
 	case scp.PhCommit:
 		topic = &scp.CommitTopic{
-			B:  b,
+			B:  unmarshalBallot(mp.T.B),
 			PN: mp.T.PN,
 			HN: mp.T.HN,
 			CN: mp.T.CN,
@@ -167,7 +181,7 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 
 	case scp.PhExt:
 		topic = &scp.ExtTopic{
-			C:  c,
+			C:  unmarshalBallot(mp.T.C),
 			HN: mp.T.HN,
 		}
 
@@ -177,8 +191,8 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 
 	msg := &scp.Msg{
 		C: mp.C,
-		V: mp.V,
-		I: mp.I,
+		V: scp.NodeID(mp.V),
+		I: scp.SlotID(mp.I),
 		Q: q,
 		T: topic,
 	}

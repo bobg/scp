@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bobg/scp"
+	"github.com/chain/txvm/protocol/bc"
 )
 
 var (
@@ -32,7 +33,7 @@ func handleNodeOutput(ctx context.Context) {
 				// We've externalized a block at a new height.
 
 				// Update the tx pool to remove published and conflicting txs.
-				block, err := getBlock(latest.I, ext.C.X.(valtype))
+				block, err := getBlock(int(latest.I), bc.Hash(ext.C.X.(valtype)))
 				if err != nil {
 					panic(err) // xxx
 				}
@@ -49,7 +50,11 @@ func handleNodeOutput(ctx context.Context) {
 				continue
 			}
 			msg := latest
-			pmsg := marshal(msg)
+			pmsg, err := marshal(msg)
+			if err != nil {
+				panic(err) // xxx
+			}
+
 			latest = nil
 
 			others := node.Peers()
@@ -62,7 +67,7 @@ func handleNodeOutput(ctx context.Context) {
 			for _, other := range others {
 				other := other
 				go func() {
-					req, err := http.NewRequest("POST", other, bytes.NewReader(pmsg))
+					req, err := http.NewRequest("POST", string(other), bytes.NewReader(pmsg))
 					if err != nil {
 						node.Logf("error constructing protocol request to %s: %s", other, err)
 						return

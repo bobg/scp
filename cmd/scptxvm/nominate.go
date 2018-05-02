@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/bobg/scp"
 	"github.com/chain/txvm/protocol/bc"
@@ -22,7 +23,13 @@ func nominate(ctx context.Context) {
 			txs = append(txs, tx)
 		}
 
-		block, _, err := chain.GenerateBlock(ctx, chain.State(), timestampMS, txs)
+		timestampMS := bc.Millis(time.Now())
+		snapshot := chain.State()
+		if snapshot.Header.TimestampMs > timestampMS {
+			timestampMS = snapshot.Header.TimestampMs + 1 // xxx sleep until this time? error out?
+		}
+
+		block, _, err := chain.GenerateBlock(ctx, snapshot, timestampMS, txs)
 		if err != nil {
 			return err
 		}
@@ -33,10 +40,11 @@ func nominate(ctx context.Context) {
 			return err
 		}
 		n := &scp.NomTopic{
-			X: scp.ValueSet{block.Hash()},
+			X: scp.ValueSet{valtype(block.Hash())},
 		}
 		msg := scp.NewMsg(node.ID, scp.SlotID(block.Height), node.Q, n) // xxx slotID is 32 bits, block height is 64
 		node.Handle(msg)
+		return nil
 	}
 
 	for {
