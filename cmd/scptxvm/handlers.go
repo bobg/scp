@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/bobg/scp"
-
 	"github.com/chain/txvm/protocol/bc"
+	"github.com/golang/protobuf/proto"
 )
 
 var nomHeight int32
@@ -44,7 +44,7 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 	msgTimesMu.Unlock()
 
 	nh := atomic.LoadInt32(&nomHeight)
-	if msg.I >= nh {
+	if int32(msg.I) >= nh {
 		var bump bool
 		switch msg.T.(type) {
 		case *scp.CommitTopic:
@@ -54,7 +54,7 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if bump {
 			// Can no longer nominate for slot nomHeight.
-			atomic.StoreInt32(&nomHeight, msg.I+1)
+			atomic.StoreInt32(&nomHeight, int32(msg.I+1))
 			nomChan <- msg.I + 1
 		}
 	}
@@ -83,10 +83,10 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Request the contents of any unknown blocks.
-	req := blocksReq{Height: msg.I}
+	req := blocksReq{Height: int(msg.I)}
 	for _, blockID := range blockIDs {
 		blockID := bc.Hash(blockID.(valtype))
-		have, err := haveBlock(msg.I, blockID)
+		have, err := haveBlock(int(msg.I), blockID)
 		if err != nil {
 			httperr(w, http.StatusInternalServerError, "could not check for block file: %s", err)
 			return
@@ -96,8 +96,8 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		req.BlockIDs = append(req.BlockIDs, blockID)
 	}
-	if len(req.Blocks) > 0 {
-		u, err := url.Parse(msg.V)
+	if len(req.BlockIDs) > 0 {
+		u, err := url.Parse(string(msg.V))
 		if err != nil {
 			httperr(w, http.StatusBadRequest, "sending node ID (%s) cannot be parsed as a URL: %s", msg.V, err)
 			return
@@ -135,7 +135,7 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// xxx check all requested blocks are present
-		for _, block = range blocks {
+		for _, block := range blocks {
 			err = storeBlock(block)
 			if err != nil {
 				httperr(w, http.StatusInternalServerError, "storing block: %s", err)
@@ -207,7 +207,7 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var rawtx bc.RawTx
-	err = proto.Unmarshal(reqBits, &tx)
+	err = proto.Unmarshal(reqBits, &rawtx)
 	if err != nil {
 		httperr(w, http.StatusBadRequest, "parsing request: %s", err)
 		return
@@ -231,10 +231,10 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	subscribersMu.Lock()
-	subscribers[subscriber] = time.Now()
+	subscribers[scp.NodeID(subscriber)] = time.Now()
 	subscribersMu.Unlock()
 
-	msgs := node.MsgsSince(max)
+	msgs := node.MsgsSince(scp.SlotID(max))
 	var resp []json.RawMessage
 	for _, msg := range msgs {
 		bits, err := marshal(msg)

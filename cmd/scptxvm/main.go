@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -28,6 +30,8 @@ var (
 	heightChan = make(chan uint64, 1)
 	nomChan    = make(chan interface{}, 1)
 	msgChan    = make(chan *scp.Msg, 1)
+
+	msgTimesMu sync.Mutex
 	msgTimes   = make(map[scp.NodeID]time.Time)
 )
 
@@ -75,7 +79,7 @@ func main() {
 
 	heightChan = make(chan uint64)
 
-	chain, err = protocol.NewChain(ctx, &initialBlock, store, heightChan)
+	chain, err = protocol.NewChain(context.Background(), &initialBlock, store, heightChan)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -91,8 +95,6 @@ func main() {
 	pubKey := prv.Public().(ed25519.PublicKey)
 	pubKeyHex := hex.EncodeToString(pubKey)
 
-	nodeID := fmt.Sprintf("http://%s/%s", conf.Addr, pubKeyHex)
-
 	var q []scp.NodeIDSet
 	for _, slice := range conf.Q {
 		var s scp.NodeIDSet
@@ -102,7 +104,8 @@ func main() {
 		q = append(q, s)
 	}
 
-	node = scp.NewNode(nodeID, q, msgChan)
+	nodeID := fmt.Sprintf("http://%s/%s", conf.Addr, pubKeyHex)
+	node = scp.NewNode(scp.NodeID(nodeID), q, msgChan)
 	go node.Run()
 	go handleNodeOutput()
 	go nominate()
@@ -114,8 +117,8 @@ func main() {
 	http.HandleFunc("/subscribe", subscribeHandler)
 	http.HandleFunc("/shutdown", shutdownHandler)
 
-	node.Logf("listening on %s", *addr)
-	http.ListenAndServe(*addr, nil)
+	node.Logf("node %s listening on %s", node.ID, conf.Addr)
+	http.ListenAndServe(conf.Addr, nil)
 }
 
 type blocksReq struct {
@@ -131,7 +134,11 @@ func subscribe() {
 		// past five minutes.
 		others := node.AllKnown()
 		for _, other := range others {
-			if t, ok := msgTimes[other]; !ok || time.Since(t) > 5*time.Minute {
+			msgTimesMu.Lock()
+			t, ok := msgTimes[other]
+			msgTimesMu.Unlock()
+
+			if !ok || time.Since(t) > 5*time.Minute {
 				u, err := url.Parse(other)
 				if err != nil {
 					panic(err) // xxx err
@@ -144,6 +151,11 @@ func subscribe() {
 					continue
 				}
 				defer resp.Body.Close()
+
+				msgTimesMu.Lock()
+				msgTimes[other] = time.Now()
+				msgTimesMu.Unlock()
+
 				respBits, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
 					node.Logf("ERROR: reading response: %s", err)

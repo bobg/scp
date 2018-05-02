@@ -51,11 +51,11 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 	switch topic := msg.T.(type) {
 	case *scp.NomTopic:
 		var x, y []string
-		for _, nodeID := range topic.X {
-			x = append(x, nodeID)
+		for _, val := range topic.X {
+			x = append(x, val)
 		}
-		for _, nodeID := range topic.Y {
-			y = append(y, nodeID)
+		for _, val := range topic.Y {
+			y = append(y, val)
 		}
 		mt.X = x
 		mt.Y = y

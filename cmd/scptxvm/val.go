@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"sort"
 
+	"github.com/bobg/scp"
 	"github.com/chain/txvm/protocol/bc"
 )
 
@@ -34,11 +35,16 @@ func (v valtype) Less(other valtype) bool {
 	return v.V3 < other.V3
 }
 
+func (v valtype) Bytes() []byte {
+	return bc.Hash(v).Bytes()
+}
+
 func (v valtype) String() string {
 	return hex.EncodeToString(bc.Hash(v).Bytes())
 }
 
-func (v valtype) Combine(other valtype, slotID SlotID) valtype {
+func (v valtype) Combine(otherval scp.Value, slotID scp.SlotID) valtype {
+	other := otherval.(valtype)
 	if other.Less(v) {
 		return other.Combine(v, slotID)
 	}

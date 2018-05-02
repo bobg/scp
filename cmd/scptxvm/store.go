@@ -19,7 +19,7 @@ type pstore struct {
 	snapshot *state.Snapshot
 }
 
-func (s pstore) Height() (uint64, error) {
+func (s pstore) Height(_ context.Context) (uint64, error) {
 	return s.height
 }
 
@@ -65,7 +65,7 @@ func (s pstore) SaveBlock(ctx context.Context, block *bc.Block) error {
 	}
 	oldName := blockFilename(block.Height, block.Hash())
 	newName := path.Join(blockDir(), strconv.FormatUint(block.Height, 10))
-	err := os.Link(oldName, newName)
+	err = os.Link(oldName, newName)
 	if os.IsExist(err) {
 		return nil
 	}
@@ -78,8 +78,6 @@ func (s pstore) FinalizeHeight(ctx context.Context, height uint64) error {
 
 func (s pstore) SaveSnapshot(ctx context.Context, snapshot *state.Snapshot) error {
 	filename := path.Join(snapshotDir(), strconv.FormatUint(snapshot.Height(), 10))
-
-	filename := s.snapshotFilename(snapshot)
 	b, err := snapshot.Bytes()
 	if err != nil {
 		return err
@@ -91,11 +89,11 @@ func blockFilename(height int, id bc.Hash) string {
 	return path.Join(blockDir(), fmt.Sprintf("%d-%x", height, id.Bytes()))
 }
 
-func getBlock(height int, id bc.Hash) (*bc.Block, err) {
+func getBlock(height int, id bc.Hash) (*bc.Block, error) {
 	return readBlockFile(blockFilename(height, id))
 }
 
-func haveBlock(height int, id bc.Hash) (bool, err) {
+func haveBlock(height int, id bc.Hash) (bool, error) {
 	filename := blockFilename(height, id)
 	_, err := os.Stat(filename)
 	if err == nil {
@@ -107,7 +105,7 @@ func haveBlock(height int, id bc.Hash) (bool, err) {
 	return false, err
 }
 
-func readBlockFile(filename string) (*bc.Block, err) {
+func readBlockFile(filename string) (*bc.Block, error) {
 	bits, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
