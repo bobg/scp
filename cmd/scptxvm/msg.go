@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/bobg/scp"
 
@@ -13,7 +16,7 @@ import (
 type (
 	marshaled struct {
 		M json.RawMessage
-		S []byte // signature over marshaledPayload
+		S string // hex-encoded signature over marshaledPayload
 	}
 
 	marshaledPayload struct {
@@ -79,8 +82,8 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 	}
 	mp := marshaledPayload{
 		C: msg.C,
-		V: msg.V,
-		I: msg.I,
+		V: string(msg.V),
+		I: int(msg.I),
 		Q: q,
 		T: mt,
 	}
@@ -91,7 +94,7 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 	sig := ed25519.Sign(prv, mpbytes)
 	m := marshaled{
 		M: mpbytes,
-		S: sig,
+		S: hex.EncodeToString(sig),
 	}
 	return json.Marshal(m)
 }
@@ -102,9 +105,6 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !ed25519.Verify(pubkey, m.M, m.S) {
-		return nil, errors.New("bad signature")
-	}
 
 	var mp marshaledPayload
 	err = json.Unmarshal(m.M, &mp)
@@ -112,17 +112,36 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 		return nil, err
 	}
 
+	sig, err := hex.DecodeString(m.S)
+	if err != nil {
+		return nil, err
+	}
+
+	u, err := url.Parse(mp.V)
+	if err != nil {
+		return nil, err
+	}
+	pubkeyHex := u.Path
+	strings.Trim(pubkeyHex, "/")
+	pubkey, err := hex.DecodeString(pubkeyHex)
+	if err != nil {
+		return nil, err
+	}
+	if !ed25519.Verify(pubkey, m.M, sig) {
+		return nil, errors.New("bad signature")
+	}
+
 	var q []scp.NodeIDSet
 	for _, slice := range mp.Q {
 		var qslice scp.NodeIDSet
 		for _, id := range slice {
-			qslice = qslice.Add(id)
+			qslice = qslice.Add(scp.NodeID(id))
 		}
 		q = append(q, qslice)
 	}
 
 	var topic scp.Topic
-	switch mp.T.(type) {
+	switch scp.Phase(mp.T.Type) {
 	case scp.PhNom:
 		topic = &scp.NomTopic{
 			X: x,
