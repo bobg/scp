@@ -80,14 +80,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	store := &pstore{
-		height:   height,
-		snapshot: snapshot,
-	}
-
 	heightChan = make(chan uint64)
 
-	chain, err = protocol.NewChain(bgctx, &initialBlock, store, heightChan)
+	chain, err = protocol.NewChain(bgctx, &initialBlock, &pstore{}, heightChan)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = chain.Recover(bgctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -171,7 +170,7 @@ func subscribe(ctx context.Context) {
 						panic(err) // xxx err
 					}
 					u.Path = "/subscribe"
-					u.RawQuery = fmt.Sprintf("subscriber=%s&max=%d", url.QueryEscape(string(node.ID)), highestExt)
+					u.RawQuery = fmt.Sprintf("subscriber=%s&max=%d", url.QueryEscape(string(node.ID)), node.HighestExt())
 					resp, err := http.Get(u.String())
 					if err != nil {
 						node.Logf("ERROR: cannot subscribe to %s: %s", other, err)

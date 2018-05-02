@@ -14,20 +14,31 @@ import (
 )
 
 // Implements protocol.Store from github.com/chain/txvm
-type pstore struct {
-	height   uint64
-	snapshot *state.Snapshot
+type pstore struct{}
+
+func (s *pstore) Height(_ context.Context) (uint64, error) {
+	infos, err := ioutil.ReadDir(blockDir())
+	if err != nil {
+		return 0, err
+	}
+	var result int64
+	for _, info := range infos {
+		n, err := strconv.ParseInt(info.Name(), 10, 64)
+		if err != nil {
+			continue
+		}
+		if n > result {
+			result = n
+		}
+	}
+	return uint64(result), nil
 }
 
-func (s pstore) Height(_ context.Context) (uint64, error) {
-	return s.height, nil
-}
-
-func (s pstore) GetBlock(_ context.Context, height uint64) (*bc.Block, error) {
+func (s *pstore) GetBlock(_ context.Context, height uint64) (*bc.Block, error) {
 	return readBlockFile(path.Join(blockDir(), strconv.FormatUint(height, 10)))
 }
 
-func (s pstore) LatestSnapshot(ctx context.Context) (*state.Snapshot, error) {
+func (s *pstore) LatestSnapshot(_ context.Context) (*state.Snapshot, error) {
 	infos, err := ioutil.ReadDir(snapshotDir())
 	if err != nil {
 		return nil, err
@@ -58,7 +69,7 @@ func (s pstore) LatestSnapshot(ctx context.Context) (*state.Snapshot, error) {
 	return &snapshot, nil
 }
 
-func (s pstore) SaveBlock(ctx context.Context, block *bc.Block) error {
+func (s *pstore) SaveBlock(_ context.Context, block *bc.Block) error {
 	err := storeBlock(block)
 	if err != nil {
 		return err
@@ -72,11 +83,11 @@ func (s pstore) SaveBlock(ctx context.Context, block *bc.Block) error {
 	return err
 }
 
-func (s pstore) FinalizeHeight(ctx context.Context, height uint64) error {
+func (s *pstore) FinalizeHeight(_ context.Context, height uint64) error {
 	return nil
 }
 
-func (s pstore) SaveSnapshot(ctx context.Context, snapshot *state.Snapshot) error {
+func (s *pstore) SaveSnapshot(_ context.Context, snapshot *state.Snapshot) error {
 	filename := path.Join(snapshotDir(), strconv.FormatUint(snapshot.Height(), 10))
 	b, err := snapshot.Bytes()
 	if err != nil {

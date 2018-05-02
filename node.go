@@ -308,7 +308,23 @@ func (n *Node) AllKnown() NodeIDSet {
 	return result
 }
 
+// HighestExt returns the ID of the highest slot for which this node
+// has an externalized value.
+func (n *Node) HighestExt() SlotID {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	var result SlotID
+	for slotID := range n.ext {
+		if slotID > result {
+			result = slotID
+		}
+	}
+	return result
+}
+
 // MsgsSince returns all this node's messages with slotID > since.
+// TODO: need a better interface, this list could get hella big.
 func (n *Node) MsgsSince(since SlotID) []*Msg {
 	n.mu.Lock()
 	defer n.mu.Unlock()
