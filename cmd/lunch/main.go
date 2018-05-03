@@ -1,22 +1,18 @@
-// +build ignore
-
 package main
 
 // Usage:
-//   go run toy.go [-seed N] 'alice: bob carol david / bob carol ed / fran gabe hank' 'bob: alice carol david / gabe hank' ...
-// Each argument gives a node's name (before the colon) and the node's
-// quorum slices.
-// Nodes do not specify themselves as quorum slice members, though
-// they are understood to belong to every quorum slice.
+//   lunch [-seed N] CONFIGFILE
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"flag"
+	"io/ioutil"
 	"log"
 	"math/rand"
-	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/bobg/scp"
 )
 
@@ -52,27 +48,36 @@ func main() {
 	flag.Parse()
 	rand.Seed(*seed)
 
-	nodes := make(map[scp.NodeID]*scp.Node)
+	if flag.NArg() < 1 {
+		log.Fatal("usage: lunch [-seed N] CONFFILE")
+	}
+	confFile := flag.Arg(0)
+	confBits, err := ioutil.ReadFile(confFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var conf struct {
+		Nodes map[string][][]string
+	}
+	_, err = toml.Decode(string(confBits), &conf)
+	if err != nil {
+		log.Fatal(err)
+	}
 
+	nodes := make(map[scp.NodeID]*scp.Node)
 	ch := make(chan *scp.Msg, 10000)
-	for _, arg := range flag.Args() {
-		parts := strings.SplitN(arg, ":", 2)
-		nodeID := scp.NodeID(parts[0])
-		var q []scp.NodeIDSet
-		for _, slices := range strings.Split(parts[1], "/") {
+	for nodeID, qstrs := range conf.Nodes {
+		q := make([]scp.NodeIDSet, 0, len(qstrs))
+		for _, slice := range qstrs {
 			var qslice scp.NodeIDSet
-			for _, field := range strings.Fields(slices) {
-				if field == string(nodeID) {
-					log.Print("skipping quorum slice member %s for node %s", field, nodeID)
-					continue
-				}
-				qslice = qslice.Add(scp.NodeID(field))
+			for _, id := range slice {
+				qslice = qslice.Add(scp.NodeID(id))
 			}
 			q = append(q, qslice)
 		}
-		node := scp.NewNode(nodeID, q, ch)
-		nodes[nodeID] = node
-		go node.Run()
+		node := scp.NewNode(scp.NodeID(nodeID), q, ch)
+		nodes[node.ID] = node
+		go node.Run(context.Background())
 	}
 
 	for slotID := scp.SlotID(1); ; slotID++ {
