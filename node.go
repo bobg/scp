@@ -3,10 +3,12 @@ package scp
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"log"
 	"math/big"
+	"sync"
 	"time"
 
 	"github.com/davecgh/go-xdr/xdr"
@@ -24,6 +26,8 @@ type Node struct {
 	// include the node itself, though the node is understood to be in
 	// every slice.
 	Q []NodeIDSet
+
+	mu sync.Mutex // protects pending and ext
 
 	// pending holds Slot objects during nomination and balloting.
 	pending map[SlotID]*Slot
@@ -54,12 +58,16 @@ const idleInterval = time.Second
 
 // Go processes incoming events for the node. It never returns and
 // should be launched as a goroutine.
-func (n *Node) Run() {
+func (n *Node) Run(ctx context.Context) {
 	go func() {
 		for {
 			timer := time.NewTimer(idleInterval)
 
 			select {
+			case <-ctx.Done():
+				n.Logf("context canceled, Run exiting")
+				return
+
 			case cmd := <-n.recv:
 				// Not idle.
 				if !timer.Stop() {
@@ -74,18 +82,24 @@ func (n *Node) Run() {
 					}
 
 				case *deferredUpdateCmd:
-					s := n.pending[cmd.slotID]
-					if s == nil {
-						continue
-					}
-					s.deferredUpdate()
+					func() {
+						n.mu.Lock()
+						defer n.mu.Unlock()
+						if s := n.pending[cmd.slotID]; s != nil {
+							s.deferredUpdate()
+						}
+					}()
 				}
 
 			case <-timer.C:
-				err := n.ping()
-				if err != nil {
-					n.Logf("ERROR %s", err)
-				}
+				func() {
+					n.mu.Lock()
+					defer n.mu.Unlock()
+					err := n.ping()
+					if err != nil {
+						n.Logf("ERROR %s", err)
+					}
+				}()
 			}
 		}
 	}()
@@ -171,7 +185,7 @@ var ErrNoPrev = errors.New("no previous value")
 // G produces a node- and slot-specific 32-byte hash for a given
 // message m. It is an error to call this on slot i>1 before n has
 // externalized a value for slot i-1.
-func (n *Node) G(i SlotID, m []byte) (result [32]byte, err error) {
+func (n *Node) G(i SlotID, m []byte) (result [32]byte, err error) { // xxx unexport
 	hasher := sha256.New()
 
 	var prevValBytes []byte
@@ -271,6 +285,71 @@ func (n *Node) Priority(i SlotID, num int, nodeID NodeID) ([32]byte, error) {
 	m.Write(numBytes)
 	m.WriteString(string(nodeID))
 	return n.G(i, m.Bytes())
+}
+
+// AllKnown gives the complete set of reachable node IDs, excluding
+// n.ID.
+func (n *Node) AllKnown() NodeIDSet {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	var result NodeIDSet
+	for _, slice := range n.Q {
+		result = result.Union(slice)
+	}
+	for _, s := range n.pending {
+		for _, msg := range s.M {
+			for _, slice := range msg.Q {
+				result = result.Union(slice)
+			}
+		}
+	}
+	result = result.Remove(n.ID)
+	return result
+}
+
+// HighestExt returns the ID of the highest slot for which this node
+// has an externalized value.
+func (n *Node) HighestExt() SlotID {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	var result SlotID
+	for slotID := range n.ext {
+		if slotID > result {
+			result = slotID
+		}
+	}
+	return result
+}
+
+// MsgsSince returns all this node's messages with slotID > since.
+// TODO: need a better interface, this list could get hella big.
+func (n *Node) MsgsSince(since SlotID) []*Msg {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	var result []*Msg
+
+	for slotID, topic := range n.ext {
+		if slotID <= since {
+			continue
+		}
+		msg := &Msg{
+			V: n.ID,
+			I: slotID,
+			Q: n.Q,
+			T: topic,
+		}
+		result = append(result, msg)
+	}
+	for slotID, slot := range n.pending {
+		if slotID <= since {
+			continue
+		}
+		result = append(result, slot.Msg())
+	}
+	return result
 }
 
 // Logf produces log output prefixed with the node's identity.
