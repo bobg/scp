@@ -1,0 +1,52 @@
+[nodes]
+
+alice = [["bob", "carol"],
+         ["bob", "dave"],
+         ["carol", "dave"]]
+bob = [["alice", "carol"],
+       ["alice", "dave"],
+       ["carol", "dave"]]
+carol = [["alice", "bob"],
+         ["alice", "dave"],
+         ["bob", "dave"]]
+dave = [["alice", "bob"],
+        ["alice", "carol"],
+        ["bob", "carol"]]
+
+elsie = [["alice", "bob"],
+         ["alice", "carol"],
+         ["alice", "dave"],
+         ["bob", "carol"],
+         ["bob", "dave"],
+         ["carol", "dave"]]
+fred = [["alice", "bob"],
+        ["alice", "carol"],
+        ["alice", "dave"],
+        ["bob", "carol"],
+        ["bob", "dave"],
+        ["carol", "dave"]]
+gwen = [["alice", "bob"],
+        ["alice", "carol"],
+        ["alice", "dave"],
+        ["bob", "carol"],
+        ["bob", "dave"],
+        ["carol", "dave"]]
+hank = [["alice", "bob"],
+        ["alice", "carol"],
+        ["alice", "dave"],
+        ["bob", "carol"],
+        ["bob", "dave"],
+        ["carol", "dave"]]
+
+inez = [["elsie", "fred"],
+        ["elsie", "gwen"],
+        ["elsie", "hank"],
+        ["fred", "gwen"],
+        ["fred", "hank"],
+        ["gwen", "hank"]]
+john = [["elsie", "fred"],
+        ["elsie", "gwen"],
+        ["elsie", "hank"],
+        ["fred", "gwen"],
+        ["fred", "hank"],
+        ["gwen", "hank"]]
