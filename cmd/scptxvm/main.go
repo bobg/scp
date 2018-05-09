@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"path"
 	"sync"
 	"time"
 
@@ -44,15 +45,21 @@ func main() {
 	bgctx = context.Background()
 	bgctx, bgcancel = context.WithCancel(bgctx)
 
-	confFile := flag.String("conf", "conf.toml", "config file")
-	dirFlag := flag.String("dir", ".", "root of working dir")
-	initialBlockFile := flag.String("initial", "", "file containing initial block")
+	var (
+		confFile         string
+		initialBlockFile string
+	)
+	flag.StringVar(&dir, "dir", ".", "root of working dir")
+	flag.StringVar(&confFile, "conf", "", "config file (default is conf.toml in root of working dir)")
+	flag.StringVar(&initialBlockFile, "initial", "", "file containing initial block (default is blocks/1 under working dir)")
 
 	flag.Parse()
 
-	dir = *dirFlag
+	if confFile == "" {
+		confFile = path.Join(dir, "conf.toml")
+	}
 
-	confBits, err := ioutil.ReadFile(*confFile)
+	confBits, err := ioutil.ReadFile(confFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,10 +74,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if *initialBlockFile == "" {
-		log.Fatal("must specify -initial")
+	if initialBlockFile == "" {
+		initialBlockFile = path.Join(blockDir(), "1")
 	}
-	initialBlockBits, err := ioutil.ReadFile(*initialBlockFile)
+	initialBlockBits, err := ioutil.ReadFile(initialBlockFile)
 	if err != nil {
 		log.Fatal(err)
 	}

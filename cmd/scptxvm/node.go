@@ -46,7 +46,7 @@ func handleNodeOutput(ctx context.Context) {
 		case <-ticker:
 			// Send only the latest protocol message (if any) to all peers
 			// and subscribers no more than once per second.
-			if latest != nil {
+			if latest == nil {
 				continue
 			}
 			msg := latest
