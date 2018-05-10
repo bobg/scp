@@ -42,6 +42,7 @@ func nominate(ctx context.Context) {
 		n := &scp.NomTopic{
 			X: scp.ValueSet{valtype(block.Hash())},
 		}
+		node.Logf("nominating block %x (%d tx(s)) at height %d", block.Hash().Bytes(), len(block.Transactions), block.Height)
 		msg := scp.NewMsg(node.ID, scp.SlotID(block.Height), node.Q, n) // xxx slotID is 32 bits, block height is 64
 		node.Handle(msg)
 		return nil
@@ -50,6 +51,7 @@ func nominate(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			node.Logf("context canceled, exiting nominate loop")
 			return
 
 		case item := <-nomChan:
@@ -59,6 +61,7 @@ func nominate(ctx context.Context) {
 					// tx is already in the pool
 					continue
 				}
+				node.Logf("adding tx %x to the pool", item.ID.Bytes())
 				txpool[item.ID] = item // xxx need to persist this
 				err := doNom()
 				if err != nil {
@@ -79,12 +82,14 @@ func nominate(ctx context.Context) {
 						spent[inp.ID] = struct{}{}
 					}
 					// Published tx.
+					node.Logf("removing published tx %x from the pool", tx.ID.Bytes())
 					delete(txpool, tx.ID)
 				}
 				for id, tx := range txpool {
 					for _, inp := range tx.Inputs {
 						if _, ok := spent[inp.ID]; ok {
 							// Conflicting tx.
+							node.Logf("removing conflicting tx %x from the pool", id.Bytes())
 							delete(txpool, id)
 							break
 						}

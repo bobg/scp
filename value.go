@@ -15,6 +15,9 @@ type Value interface {
 	// should be deterministic and commutative.
 	Combine(Value, SlotID) Value
 
+	// IsNil tells whether this should be considered a nil value.
+	IsNil() bool
+
 	// Bytes produces a byte-string representation of the value, not
 	// meant for human consumption.
 	Bytes() []byte
@@ -26,7 +29,7 @@ type Value interface {
 // VString calls a Value's String method. If the value is nil, returns
 // the string "<nil>".
 func VString(v Value) string {
-	if v == nil {
+	if isNilVal(v) {
 		return "<nil>"
 	}
 	return v.String()
@@ -51,4 +54,8 @@ func (vs ValueSet) String() string {
 		strs = append(strs, VString(v))
 	}
 	return fmt.Sprintf("[%s]", strings.Join(strs, " "))
+}
+
+func isNilVal(v Value) bool {
+	return v == nil || v.IsNil()
 }

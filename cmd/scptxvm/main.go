@@ -34,8 +34,8 @@ var (
 	wg       sync.WaitGroup
 
 	heightChan = make(chan uint64, 1)
-	nomChan    = make(chan interface{}, 1)
-	msgChan    = make(chan *scp.Msg, 1)
+	nomChan    = make(chan interface{}, 1000)
+	msgChan    = make(chan *scp.Msg, 1000)
 
 	msgTimesMu sync.Mutex
 	msgTimes   = make(map[scp.NodeID]time.Time)
@@ -147,11 +147,11 @@ func main() {
 	go subscribe(bgctx)
 	wg.Add(4)
 
-	http.HandleFunc("/"+pubKeyHex, protocolHandler) // scp protocol messages go here
-	http.HandleFunc("/blocks", blocksHandler)       // nodes resolve block ids here
-	http.HandleFunc("/submit", submitHandler)       // new txs get proposed here
-	http.HandleFunc("/subscribe", subscribeHandler)
-	http.HandleFunc("/shutdown", shutdownHandler)
+	handle("/"+pubKeyHex, protocolHandler) // scp protocol messages go here
+	handle("/blocks", blocksHandler)       // nodes resolve block ids here
+	handle("/submit", submitHandler)       // new txs get proposed here
+	handle("/subscribe", subscribeHandler)
+	handle("/shutdown", shutdownHandler)
 
 	srv.Addr = conf.Addr
 	node.Logf("node %s listening on %s", node.ID, conf.Addr)
@@ -159,6 +159,13 @@ func main() {
 	node.Logf("ListenAndServe: %s", err)
 
 	wg.Wait()
+}
+
+func handle(path string, handler http.HandlerFunc) {
+	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		node.Logf("handling %s %s", r.Method, path)
+		handler(w, r)
+	})
 }
 
 type blocksReq struct {
@@ -174,6 +181,7 @@ func subscribe(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			node.Logf("context canceled, exiting subscribe loop")
 			ticker.Stop()
 			return
 
@@ -189,6 +197,7 @@ func subscribe(ctx context.Context) {
 				msgTimesMu.Unlock()
 
 				if !ok || time.Since(t) > 5*time.Minute {
+					node.Logf("refreshing subscription to %s", other)
 					u, err := url.Parse(string(other))
 					if err != nil {
 						panic(err) // xxx err
@@ -223,6 +232,7 @@ func subscribe(ctx context.Context) {
 							node.Logf("ERROR: parsing protocol message: %s", err)
 							continue
 						}
+						node.Logf("* sending %s to node.Handle", msg)
 						node.Handle(msg)
 					}
 				}

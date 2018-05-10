@@ -53,6 +53,8 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 	var mt marshaledTopic
 	switch topic := msg.T.(type) {
 	case *scp.NomTopic:
+		mt.Type = int(scp.PhNom)
+
 		var x, y []bc.Hash
 		for _, val := range topic.X {
 			if val != nil {
@@ -68,6 +70,8 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 		mt.Y = y
 
 	case *scp.PrepTopic:
+		mt.Type = int(scp.PhPrep)
+
 		mt.B = marshaledBallot{N: topic.B.N, X: valToHash(topic.B.X)}
 		mt.P = marshaledBallot{N: topic.P.N, X: valToHash(topic.P.X)}
 		mt.PP = marshaledBallot{N: topic.PP.N, X: valToHash(topic.PP.X)}
@@ -75,12 +79,16 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 		mt.CN = topic.CN
 
 	case *scp.CommitTopic:
+		mt.Type = int(scp.PhCommit)
+
 		mt.B = marshaledBallot{N: topic.B.N, X: valToHash(topic.B.X)}
 		mt.PN = topic.PN
 		mt.HN = topic.HN
 		mt.CN = topic.CN
 
 	case *scp.ExtTopic:
+		mt.Type = int(scp.PhExt)
+
 		mt.C = marshaledBallot{N: topic.C.N, X: valToHash(topic.C.X)}
 		mt.HN = topic.HN
 	}

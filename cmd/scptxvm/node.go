@@ -26,6 +26,7 @@ func handleNodeOutput(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			node.Logf("context canceled, exiting node-output loop")
 			return
 
 		case latest = <-msgChan:
@@ -67,6 +68,7 @@ func handleNodeOutput(ctx context.Context) {
 			for _, other := range others {
 				other := other
 				go func() {
+					node.Logf("* sending %s to %s", msg, other)
 					req, err := http.NewRequest("POST", string(other), bytes.NewReader(pmsg))
 					if err != nil {
 						node.Logf("error constructing protocol request to %s: %s", other, err)

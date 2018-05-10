@@ -33,6 +33,10 @@ func (v valType) Combine(other scp.Value, slotID scp.SlotID) scp.Value {
 	return other
 }
 
+func (v valType) IsNil() bool {
+	return v == ""
+}
+
 func (v valType) Bytes() []byte {
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.BigEndian, v)

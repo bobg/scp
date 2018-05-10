@@ -15,7 +15,7 @@ var ZeroBallot Ballot
 
 // IsZero tells whether b is the zero ballot.
 func (b Ballot) IsZero() bool {
-	return b.N == 0 && b.X == nil
+	return b.N == 0 && isNilVal(b.X)
 }
 
 // Less tells whether a ballot is less than another.
@@ -26,10 +26,10 @@ func (b Ballot) Less(other Ballot) bool {
 	if b.N > other.N {
 		return false
 	}
-	if b.X == nil {
-		return other.X != nil
+	if isNilVal(b.X) {
+		return !isNilVal(other.X)
 	}
-	if other.X == nil {
+	if isNilVal(other.X) {
 		return false
 	}
 	return b.X.Less(other.X)

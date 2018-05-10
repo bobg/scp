@@ -130,3 +130,8 @@ func (v valtype) Combine(otherval scp.Value, slotID scp.SlotID) scp.Value {
 
 	return valtype(block.Hash())
 }
+
+func (v valtype) IsNil() bool {
+	h := bc.Hash(v)
+	return h.IsZero()
+}

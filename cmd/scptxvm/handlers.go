@@ -59,6 +59,14 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	maybeAdd := func(set scp.ValueSet, val scp.Value) scp.ValueSet {
+		h := valToHash(val)
+		if h.IsZero() {
+			return set
+		}
+		return set.Add(val)
+	}
+
 	// Collect all block IDs mentioned in the new message.
 	var blockIDs scp.ValueSet
 	switch topic := msg.T.(type) {
@@ -68,18 +76,14 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 
 	case *scp.PrepTopic:
 		blockIDs = blockIDs.Add(topic.B.X)
-		if !topic.P.IsZero() {
-			blockIDs = blockIDs.Add(topic.P.X)
-		}
-		if !topic.PP.IsZero() {
-			blockIDs = blockIDs.Add(topic.PP.X)
-		}
+		blockIDs = maybeAdd(blockIDs, topic.P.X)
+		blockIDs = maybeAdd(blockIDs, topic.PP.X)
 
 	case *scp.CommitTopic:
-		blockIDs = blockIDs.Add(topic.B.X)
+		blockIDs = maybeAdd(blockIDs, topic.B.X)
 
 	case *scp.ExtTopic:
-		blockIDs = blockIDs.Add(topic.C.X)
+		blockIDs = maybeAdd(blockIDs, topic.C.X)
 	}
 
 	// Request the contents of any unknown blocks.
@@ -97,6 +101,7 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 		req.BlockIDs = append(req.BlockIDs, blockID)
 	}
 	if len(req.BlockIDs) > 0 {
+		node.Logf("requesting contents of %d block(s) from %s", len(req.BlockIDs), msg.V)
 		u, err := url.Parse(string(msg.V))
 		if err != nil {
 			httperr(w, http.StatusBadRequest, "sending node ID (%s) cannot be parsed as a URL: %s", msg.V, err)
@@ -144,6 +149,7 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	node.Logf("* sending %s to node.Handle", msg)
 	node.Handle(msg)
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -218,6 +224,7 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nomChan <- tx
+	node.Logf("accepted tx submission %x", tx.ID.Bytes())
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -235,6 +242,9 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	subscribersMu.Unlock()
 
 	msgs := node.MsgsSince(scp.SlotID(max))
+
+	node.Logf("new subscriber %s sent max %d, responding with %d message(s)", subscriber, max, len(msgs))
+
 	var resp []json.RawMessage
 	for _, msg := range msgs {
 		bits, err := marshal(msg)
