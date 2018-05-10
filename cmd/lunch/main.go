@@ -75,7 +75,7 @@ func main() {
 			}
 			q = append(q, qslice)
 		}
-		node := scp.NewNode(scp.NodeID(nodeID), q, ch)
+		node := scp.NewNode(scp.NodeID(nodeID), q, ch, nil)
 		nodes[node.ID] = node
 		go node.Run(context.Background())
 	}

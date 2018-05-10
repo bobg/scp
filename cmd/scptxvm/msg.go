@@ -55,29 +55,33 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 	case *scp.NomTopic:
 		var x, y []bc.Hash
 		for _, val := range topic.X {
-			x = append(x, bc.Hash(val.(valtype)))
+			if val != nil {
+				x = append(x, valToHash(val))
+			}
 		}
 		for _, val := range topic.Y {
-			y = append(y, bc.Hash(val.(valtype)))
+			if val != nil {
+				y = append(y, valToHash(val))
+			}
 		}
 		mt.X = x
 		mt.Y = y
 
 	case *scp.PrepTopic:
-		mt.B = marshaledBallot{N: topic.B.N, X: bc.Hash(topic.B.X.(valtype))}
-		mt.P = marshaledBallot{N: topic.P.N, X: bc.Hash(topic.P.X.(valtype))}
-		mt.PP = marshaledBallot{N: topic.PP.N, X: bc.Hash(topic.PP.X.(valtype))}
+		mt.B = marshaledBallot{N: topic.B.N, X: valToHash(topic.B.X)}
+		mt.P = marshaledBallot{N: topic.P.N, X: valToHash(topic.P.X)}
+		mt.PP = marshaledBallot{N: topic.PP.N, X: valToHash(topic.PP.X)}
 		mt.HN = topic.HN
 		mt.CN = topic.CN
 
 	case *scp.CommitTopic:
-		mt.B = marshaledBallot{N: topic.B.N, X: bc.Hash(topic.B.X.(valtype))}
+		mt.B = marshaledBallot{N: topic.B.N, X: valToHash(topic.B.X)}
 		mt.PN = topic.PN
 		mt.HN = topic.HN
 		mt.CN = topic.CN
 
 	case *scp.ExtTopic:
-		mt.C = marshaledBallot{N: topic.C.N, X: bc.Hash(topic.C.X.(valtype))}
+		mt.C = marshaledBallot{N: topic.C.N, X: valToHash(topic.C.X)}
 		mt.HN = topic.HN
 	}
 	mp := marshaledPayload{
@@ -97,6 +101,13 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 		S: hex.EncodeToString(sig),
 	}
 	return json.Marshal(m)
+}
+
+func valToHash(v scp.Value) (result bc.Hash) {
+	if v != nil {
+		result = bc.Hash(v.(valtype))
+	}
+	return result
 }
 
 func unmarshalBallot(mb marshaledBallot) scp.Ballot {
@@ -129,7 +140,7 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 		return nil, err
 	}
 	pubkeyHex := u.Path
-	strings.Trim(pubkeyHex, "/")
+	pubkeyHex = strings.Trim(pubkeyHex, "/")
 	pubkey, err := hex.DecodeString(pubkeyHex)
 	if err != nil {
 		return nil, err

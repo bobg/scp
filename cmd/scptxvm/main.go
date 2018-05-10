@@ -98,6 +98,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	height := chain.Height()
+	block, err := chain.GetBlock(bgctx, height)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	prvBits, err := hex.DecodeString(conf.Prv)
 	if err != nil {
 		log.Fatal(err)
@@ -118,8 +124,19 @@ func main() {
 		q = append(q, s)
 	}
 
+	// xxx this is ugly!
+	ext := map[scp.SlotID]*scp.ExtTopic{
+		scp.SlotID(chain.Height()): &scp.ExtTopic{
+			C: scp.Ballot{
+				N: 1,
+				X: valtype(block.Hash()),
+			},
+			HN: 1,
+		},
+	}
+
 	nodeID := fmt.Sprintf("http://%s/%s", conf.Addr, pubKeyHex)
-	node = scp.NewNode(scp.NodeID(nodeID), q, msgChan)
+	node = scp.NewNode(scp.NodeID(nodeID), q, msgChan, ext)
 
 	go func() {
 		node.Run(bgctx)

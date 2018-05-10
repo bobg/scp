@@ -41,12 +41,15 @@ type Node struct {
 }
 
 // NewNode produces a new node.
-func NewNode(id NodeID, q []NodeIDSet, ch chan<- *Msg) *Node {
+func NewNode(id NodeID, q []NodeIDSet, ch chan<- *Msg, ext map[SlotID]*ExtTopic) *Node {
+	if ext == nil {
+		ext = make(map[SlotID]*ExtTopic)
+	}
 	return &Node{
 		ID:      id,
 		Q:       q,
 		pending: make(map[SlotID]*Slot),
-		ext:     make(map[SlotID]*ExtTopic),
+		ext:     ext,
 		recv:    make(chan Cmd, 1000),
 		send:    ch,
 	}
