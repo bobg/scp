@@ -130,7 +130,7 @@ func (e *Msg) votesOrAcceptsPreparedSet() BallotSet {
 	return result
 }
 
-// Returns the set of ballots which e accepts as prepared.
+// Returns the set of ballots that e accepts as prepared.
 func (e *Msg) acceptsPreparedSet() BallotSet {
 	var result BallotSet
 	switch topic := e.T.(type) {

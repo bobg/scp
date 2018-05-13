@@ -180,51 +180,53 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 				s.B.X = s.Z.Combine(s.ID) // xxx does this require changing s.B.N?
 			}
 		}
-	} else {
-		s.updateP()
+		return nil
+	}
 
-		// Update s.H, the highest confirmed-prepared ballot.
-		var cpIn, cpOut BallotSet
-		if !s.P.IsZero() {
-			cpIn = cpIn.Add(s.P)
-			if !s.PP.IsZero() {
-				cpIn = cpIn.Add(s.PP)
-			}
-		}
-		nodeIDs := s.findQuorum(&ballotSetPred{
-			ballots:      cpIn,
-			finalBallots: &cpOut,
-			testfn: func(msg *Msg, ballots BallotSet) BallotSet {
-				return msg.acceptsPreparedSet()
-			},
-		})
-		if len(nodeIDs) > 0 {
-			h := cpOut[len(cpOut)-1]
-			if s.H.Less(h) {
-				s.H = h
-			}
-		}
+	s.updateP()
 
-		s.updateB()
-
-		// Update s.C.
-		if !s.C.IsZero() {
-			if (s.C.Less(s.P) && !ValueEqual(s.P.X, s.C.X)) || (s.C.Less(s.PP) && !ValueEqual(s.PP.X, s.C.X)) {
-				s.C = ZeroBallot
-			}
-		}
-		if s.C.IsZero() && !s.H.IsZero() && !s.P.Aborts(s.H) && !s.PP.Aborts(s.H) {
-			s.C = s.B
-		}
-
-		// The PREPARE phase ends at a node when the statement "commit
-		// b" reaches the accept state in federated voting for some
-		// ballot "b".
-		if s.updateAcceptsCommitBounds() {
-			// Accept commit(<n, s.B.X>).
-			s.Ph = PhCommit
+	// Update s.H, the highest confirmed-prepared ballot.
+	var cpIn, cpOut BallotSet
+	if !s.P.IsZero() {
+		cpIn = cpIn.Add(s.P)
+		if !s.PP.IsZero() {
+			cpIn = cpIn.Add(s.PP)
 		}
 	}
+	nodeIDs := s.findQuorum(&ballotSetPred{
+		ballots:      cpIn,
+		finalBallots: &cpOut,
+		testfn: func(msg *Msg, ballots BallotSet) BallotSet {
+			return msg.acceptsPreparedSet()
+		},
+	})
+	if len(nodeIDs) > 0 {
+		h := cpOut[len(cpOut)-1]
+		if s.H.Less(h) {
+			s.H = h
+		}
+	}
+
+	s.updateB()
+
+	// Update s.C.
+	if !s.C.IsZero() {
+		if (s.C.Less(s.P) && !ValueEqual(s.P.X, s.C.X)) || (s.C.Less(s.PP) && !ValueEqual(s.PP.X, s.C.X)) {
+			s.C = ZeroBallot
+		}
+	}
+	if s.C.IsZero() && !s.H.IsZero() && !s.P.Aborts(s.H) && !s.PP.Aborts(s.H) {
+		s.C = s.B
+	}
+
+	// The PREPARE phase ends at a node when the statement "commit
+	// b" reaches the accept state in federated voting for some
+	// ballot "b".
+	if s.updateAcceptsCommitBounds() {
+		// Accept commit(<n, s.B.X>).
+		s.Ph = PhCommit
+	}
+
 	return nil
 }
 
