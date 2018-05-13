@@ -11,5 +11,3 @@ type msgCmd struct {
 type deferredUpdateCmd struct {
 	slotID SlotID
 }
-
-type pingCmd struct{}

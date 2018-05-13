@@ -59,8 +59,8 @@ func NewNode(id NodeID, q []NodeIDSet, ch chan<- *Msg, ext map[SlotID]*ExtTopic)
 // message for every pending slot.
 const idleInterval = time.Second
 
-// Go processes incoming events for the node. It never returns and
-// should be launched as a goroutine.
+// Run processes incoming events for the node. It returns only when
+// its context is canceled and should be launched as a goroutine.
 func (n *Node) Run(ctx context.Context) {
 	go func() {
 		for {
@@ -95,14 +95,24 @@ func (n *Node) Run(ctx context.Context) {
 				}
 
 			case <-timer.C:
-				func() {
+				// Re-handle all messages in all pending slots.
+				err := func() error {
 					n.mu.Lock()
 					defer n.mu.Unlock()
-					err := n.ping()
-					if err != nil {
-						n.Logf("ERROR %s", err)
+
+					for _, s := range n.pending {
+						for _, msg := range s.M {
+							err := n.handle(msg)
+							if err != nil {
+								return err
+							}
+						}
 					}
+					return nil
 				}()
+				if err != nil {
+					n.Logf("ERROR %s", err)
+				}
 			}
 		}
 	}()
@@ -161,12 +171,6 @@ func (n *Node) handle(msg *Msg) error {
 
 	n.send <- outbound
 	return nil
-}
-
-// Ping causes n to re-Handle the latest message from each sender in
-// all pending slots.
-func (n *Node) Ping() {
-	n.recv <- &pingCmd{}
 }
 
 func (n *Node) ping() error {
