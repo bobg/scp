@@ -107,13 +107,17 @@ func (v valtype) Combine(otherval scp.Value, slotID scp.SlotID) scp.Value {
 		}
 	}
 	txs = txs[:n]
+	cmtxs := make([]*bc.CommitmentsTx, 0, len(txs))
+	for _, tx := range txs {
+		cmtxs = append(cmtxs, bc.NewCommitmentsTx(tx))
+	}
 
 	// Use the earlier timestamp.
 	timestampMS := b1.TimestampMs
 	if b2.TimestampMs < timestampMS {
 		timestampMS = b2.TimestampMs
 	}
-	block, _, err := chain.GenerateBlock(bgctx, chain.State(), timestampMS, txs)
+	block, _, err := chain.GenerateBlock(bgctx, chain.State(), timestampMS, cmtxs)
 	if err != nil {
 		// Cannot make a block from the combined set of txs. Choose one of
 		// the input blocks as the winner.

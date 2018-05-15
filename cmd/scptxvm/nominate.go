@@ -18,9 +18,9 @@ func nominate(ctx context.Context) {
 			return nil
 		}
 
-		txs := make([]*bc.Tx, 0, len(txpool))
+		txs := make([]*bc.CommitmentsTx, 0, len(txpool))
 		for _, tx := range txpool {
-			txs = append(txs, tx)
+			txs = append(txs, bc.NewCommitmentsTx(tx))
 		}
 
 		timestampMS := bc.Millis(time.Now())
