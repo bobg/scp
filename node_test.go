@@ -37,7 +37,8 @@ func TestPeers(t *testing.T) {
 				ns := toNodeIDSet(slice)
 				q = append(q, ns)
 			}
-			n := NewNode("x", q, nil)
+			ch := make(chan *Msg)
+			n := NewNode("x", q, ch, nil)
 			got := n.Peers()
 			want := toNodeIDSet(tc.want)
 			if !reflect.DeepEqual(got, NodeIDSet(want)) {
@@ -76,7 +77,8 @@ func TestWeight(t *testing.T) {
 				ns := toNodeIDSet(slice)
 				q = append(q, ns)
 			}
-			n := NewNode("x", q, nil)
+			ch := make(chan *Msg)
+			n := NewNode("x", q, ch, nil)
 			_, is1 := n.Weight(n.ID)
 			if !is1 {
 				t.Errorf("got !is1, want is1 for n.Weight(n.ID)")

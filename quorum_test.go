@@ -39,7 +39,8 @@ func TestFindBlockingSet(t *testing.T) {
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%02d", i+1), func(t *testing.T) {
 			network := toNetwork(tc.network)
-			node := NewNode("x", network["x"], nil)
+			ch := make(chan *Msg)
+			node := NewNode("x", network["x"], ch, nil)
 			slot := newSlot(1, node)
 			for _, vstr := range strings.Fields(tc.msgs) {
 				v := NodeID(vstr)

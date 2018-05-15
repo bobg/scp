@@ -10,6 +10,8 @@ import (
 
 type valtype uint32
 
+func (v valtype) IsNil() bool { return false }
+
 func (v valtype) Less(other Value) bool {
 	return v < other.(valtype)
 }
