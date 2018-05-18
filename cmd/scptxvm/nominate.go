@@ -29,11 +29,16 @@ func nominate(ctx context.Context) {
 			timestampMS = snapshot.Header.TimestampMs + 1 // xxx sleep until this time? error out?
 		}
 
-		block, _, err := chain.GenerateBlock(ctx, snapshot, timestampMS, txs)
+		ublock, _, err := chain.GenerateBlock(ctx, snapshot, timestampMS, txs)
 		if err != nil {
 			return err
 		}
 		// xxx figure out which txs GenerateBlock removed as invalid, and remove them from txpool
+
+		block, err := bc.SignBlock(ublock, snapshot.Header, nil)
+		if err != nil {
+			return err
+		}
 
 		err = storeBlock(block)
 		if err != nil {

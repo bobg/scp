@@ -117,7 +117,8 @@ func (v valtype) Combine(otherval scp.Value, slotID scp.SlotID) scp.Value {
 	if b2.TimestampMs < timestampMS {
 		timestampMS = b2.TimestampMs
 	}
-	block, _, err := chain.GenerateBlock(bgctx, chain.State(), timestampMS, cmtxs)
+	snapshot := chain.State()
+	ublock, _, err := chain.GenerateBlock(bgctx, snapshot, timestampMS, cmtxs)
 	if err != nil {
 		// Cannot make a block from the combined set of txs. Choose one of
 		// the input blocks as the winner.
@@ -125,6 +126,11 @@ func (v valtype) Combine(otherval scp.Value, slotID scp.SlotID) scp.Value {
 			return v
 		}
 		return other
+	}
+
+	block, err := bc.SignBlock(ublock, snapshot.Header, nil)
+	if err != nil {
+		panic(err)
 	}
 
 	err = storeBlock(block)
