@@ -320,6 +320,24 @@ func (s *Slot) Msg() *Msg {
 	return msg
 }
 
+// "When a node sees sees messages from a quorum to which it belongs
+// such that each message's "ballot.counter" is greater than or equal
+// to the local "ballot.counter", the node arms a timer for its local
+// "ballot.counter + 1" seconds."
+func (s *Slot) maybeScheduleUpd() {
+	if s.Upd != nil {
+		// Don't bother if a timer's already armed.
+		return
+	}
+	nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
+		return msg.bN() >= s.B.N
+	}))
+	if len(nodeIDs) == 0 {
+		return
+	}
+	s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(DeferredUpdateInterval)), s.deferredUpdate)
+}
+
 func (s *Slot) deferredUpdate() {
 	if s.Upd == nil {
 		return
@@ -355,19 +373,8 @@ func (s *Slot) updateB() {
 		s.cancelUpd()
 		return
 	}
-	// When a node sees sees messages from a quorum to which it
-	// belongs such that each message's "ballot.counter" is
-	// greater than or equal to the local "ballot.counter", the
-	// node arms a timer for its local "ballot.counter + 1"
-	// seconds.
-	if s.Upd == nil { // don't bother if a timer's already armed
-		nodeIDs := s.findQuorum(fpred(func(msg *Msg) bool {
-			return msg.bN() >= s.B.N
-		}))
-		if len(nodeIDs) > 0 {
-			s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(DeferredUpdateInterval)), s.deferredUpdate)
-		}
-	}
+
+	s.maybeScheduleUpd()
 
 	// If nodes forming a blocking threshold all have
 	// "ballot.counter" values greater than the local
@@ -375,9 +382,6 @@ func (s *Slot) updateB() {
 	// "ballot.counter" to the lowest value such that this is no
 	// longer the case.  (When doing so, it also disables any
 	// pending timers associated with the old "counter".)
-	//
-	// TODO: new language says "if appropriate according to the rules
-	// above arms a new timer"
 	//
 	// TODO: this code uses the minimum value from the blocking set
 	// found, but should instead use the max-min from all possible
@@ -405,6 +409,7 @@ func (s *Slot) updateB() {
 	}
 	if doSetBX {
 		s.setBX()
+		s.maybeScheduleUpd()
 	}
 }
 
