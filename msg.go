@@ -77,7 +77,7 @@ func (e *Msg) bN() int {
 		return topic.B.N
 
 	case *ExtTopic:
-		return topic.C.N
+		return math.MaxInt32
 	}
 	return 0
 }

@@ -50,6 +50,8 @@ func newSlot(id SlotID, n *Node) *Slot {
 		V:  n,
 		T:  time.Now(),
 		M:  make(map[NodeID]*Msg),
+
+		nextRound: 1,
 	}
 }
 
@@ -444,6 +446,10 @@ func round(d time.Duration) int {
 // current or any earlier nomination round.
 func (s *Slot) maxPrioritySender(nodeID NodeID) (bool, error) {
 	round := s.Round()
+
+	// xxx
+	n := len(s.maxPriPeers)
+
 	for r := s.nextRound; r <= round; r++ {
 		neighbors, err := s.V.Neighbors(s.ID, r)
 		if err != nil {
@@ -465,6 +471,11 @@ func (s *Slot) maxPrioritySender(nodeID NodeID) (bool, error) {
 		}
 		s.maxPriPeers = s.maxPriPeers.Add(sender)
 	}
+
+	if len(s.maxPriPeers) > n {
+		s.Logf("round %d: added %d maxPriPeer(s)", round, len(s.maxPriPeers)-n)
+	}
+
 	s.nextRound = round + 1
 	return s.maxPriPeers.Contains(nodeID), nil
 }
@@ -536,13 +547,19 @@ func (s *Slot) updateP() {
 		}
 	})
 	if len(nodeIDs) > 0 {
-		s.P = apOut[len(apOut)-1]
-		if s.Ph == PhPrep {
-			for i := len(apOut) - 2; i >= 0; i-- {
-				ap := apOut[i]
-				if ap.N < s.P.N && !ValueEqual(ap.X, s.P.X) {
-					s.PP = ap
-					break
+		// Exclude ballots higher than s.B
+		for len(apOut) > 0 && s.B.Less(apOut[len(apOut)-1]) {
+			apOut = apOut[:len(apOut)-1]
+		}
+		if len(apOut) > 0 {
+			s.P = apOut[len(apOut)-1]
+			if s.Ph == PhPrep {
+				for i := len(apOut) - 2; i >= 0; i-- {
+					ap := apOut[i]
+					if ap.N < s.P.N && !ValueEqual(ap.X, s.P.X) {
+						s.PP = ap
+						break
+					}
 				}
 			}
 		}

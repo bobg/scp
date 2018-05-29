@@ -62,60 +62,60 @@ const idleInterval = time.Second
 // Run processes incoming events for the node. It returns only when
 // its context is canceled and should be launched as a goroutine.
 func (n *Node) Run(ctx context.Context) {
-	go func() {
-		for {
-			timer := time.NewTimer(idleInterval)
+	for {
+		timer := time.NewTimer(idleInterval)
 
-			select {
-			case <-ctx.Done():
-				n.Logf("context canceled, Run exiting")
-				return
+		select {
+		case <-ctx.Done():
+			n.Logf("context canceled, Run exiting")
+			return
 
-			case cmd := <-n.recv:
-				// Not idle.
-				if !timer.Stop() {
-					<-timer.C
-				}
+		case cmd := <-n.recv:
+			// Not idle.
+			if !timer.Stop() {
+				<-timer.C
+			}
 
-				switch cmd := cmd.(type) {
-				case *msgCmd:
-					err := n.handle(cmd.msg)
-					if err != nil {
-						n.Logf("ERROR %s", err)
-					}
-
-				case *deferredUpdateCmd:
-					func() {
-						n.mu.Lock()
-						defer n.mu.Unlock()
-						if s := n.pending[cmd.slotID]; s != nil {
-							s.deferredUpdate()
-						}
-					}()
-				}
-
-			case <-timer.C:
-				// Re-handle all messages in all pending slots.
-				err := func() error {
-					n.mu.Lock()
-					defer n.mu.Unlock()
-
-					for _, s := range n.pending {
-						for _, msg := range s.M {
-							err := n.handle(msg)
-							if err != nil {
-								return err
-							}
-						}
-					}
-					return nil
-				}()
+			switch cmd := cmd.(type) {
+			case *msgCmd:
+				err := n.handle(cmd.msg)
 				if err != nil {
 					n.Logf("ERROR %s", err)
 				}
+
+			case *deferredUpdateCmd:
+				func() {
+					n.mu.Lock()
+					defer n.mu.Unlock()
+					if s := n.pending[cmd.slotID]; s != nil {
+						s.deferredUpdate()
+					}
+				}()
+			}
+
+		case <-timer.C:
+			// Re-handle all messages in all pending slots.
+			// TODO: Don't do this every second. Schedule a single
+			// re-handling per nomination round.
+			err := func() error {
+				n.mu.Lock()
+				defer n.mu.Unlock()
+
+				for _, s := range n.pending {
+					for _, msg := range s.M {
+						err := n.handle(msg)
+						if err != nil {
+							return err
+						}
+					}
+				}
+				return nil
+			}()
+			if err != nil {
+				n.Logf("ERROR %s", err)
 			}
 		}
-	}()
+	}
 }
 
 // Handle queues an incoming protocol message. When processed it will
