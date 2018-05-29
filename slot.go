@@ -375,6 +375,16 @@ func (s *Slot) updateB() {
 	// "ballot.counter" to the lowest value such that this is no
 	// longer the case.  (When doing so, it also disables any
 	// pending timers associated with the old "counter".)
+	//
+	// TODO: new language says "if appropriate according to the rules
+	// above arms a new timer"
+	//
+	// TODO: this code uses the minimum value from the blocking set
+	// found, but should instead use the max-min from all possible
+	// blocking sets (i.e., after this, there must be no blocking set
+	// where all ballot counters are higher).
+	//
+	// TODO: the "to avoid exhausting ballot.counter" logic.
 	var doSetBX bool
 	for {
 		nodeIDs := s.findBlockingSet(fpred(func(msg *Msg) bool {
@@ -412,11 +422,17 @@ func (s *Slot) setBX() {
 // Round tells the current (time-based) nomination round.
 //
 // Nomination round N lasts for a duration of
-// (2+N)*NomRoundInterval. Via the quadratic formula this tells us
-// that after an elapsed time of T, it's round sqrt(1+T)-1.
+// (2+N)*NomRoundInterval. Also, the first round is round 1. Via the
+// quadratic formula this tells us that after an elapsed time of T,
+// it's round 1 + ((sqrt(8T+25)-5) / 2)
 func (s *Slot) Round() int {
-	elapsed := float64(time.Since(s.T)) / float64(NomRoundInterval)
-	return int(math.Sqrt(1.0+elapsed) - 1.0)
+	return round(time.Since(s.T))
+}
+
+func round(d time.Duration) int {
+	elapsed := float64(d) / float64(NomRoundInterval)
+	r := math.Sqrt(8.0*elapsed + 25.0)
+	return 1 + int((r-5.0)/2.0)
 }
 
 // Tells whether the given peer has or had the maximum priority in the
