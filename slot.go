@@ -24,8 +24,9 @@ type Slot struct {
 	Y ValueSet  // votes for accept(nominate(val))
 	Z ValueSet  // confirmed nominated values
 
-	maxPriPeers NodeIDSet // set of peers that have ever had max priority
-	nextRound   int       // 1+(latest round at which maxPriPeers was updated)
+	maxPriPeers    NodeIDSet // set of peers that have ever had max priority
+	lastRound      int       // latest round at which maxPriPeers was updated
+	nextRoundTimer *time.Timer
 
 	B     Ballot
 	P, PP Ballot // two highest "accepted prepared" ballots with differing values
@@ -44,15 +45,27 @@ const (
 	PhExt
 )
 
-func newSlot(id SlotID, n *Node) *Slot {
-	return &Slot{
+func newSlot(id SlotID, n *Node) (*Slot, error) {
+	s := &Slot{
 		ID: id,
 		V:  n,
 		T:  time.Now(),
 		M:  make(map[NodeID]*Msg),
-
-		nextRound: 1,
 	}
+
+	peerID, err := s.findMaxPriPeer(1)
+	if err != nil {
+		return nil, err
+	}
+	s.maxPriPeers = s.maxPriPeers.Add(peerID)
+	s.lastRound = 1
+
+	dur := time.Until(s.roundTime(2))
+	s.nextRoundTimer = time.AfterFunc(dur, func() {
+		s.V.newRound(s)
+	})
+
+	return s, nil
 }
 
 var (
@@ -128,12 +141,7 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 }
 
 func (s *Slot) doNomPhase(msg *Msg) error {
-	ok, err := s.maxPrioritySender(msg.V)
-	if err != nil {
-		return err
-	}
-
-	if ok {
+	if s.maxPrioritySender(msg.V) {
 		// "Echo" nominated values by adding them to s.X.
 		switch topic := msg.T.(type) {
 		case *NomTopic:
@@ -171,15 +179,15 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 	if topic, ok := msg.T.(*NomTopic); ok {
 		if s.H.N == 0 {
 			// Can still update s.Z and s.B.X
-			ok, err := s.maxPrioritySender(msg.V)
-			if err != nil {
-				return err
-			}
-			if ok {
+			if s.maxPrioritySender(msg.V) {
 				s.X = s.X.Union(topic.X)
 				s.X = s.X.Union(topic.Y)
 				s.updateYZ()
-				s.B.X = s.Z.Combine(s.ID) // xxx does this require changing s.B.N?
+
+				if false {
+					// xxx do not update except when updating s.B.N
+					s.B.X = s.Z.Combine(s.ID) // xxx does this require changing s.B.N?
+				}
 			}
 		}
 		return nil
@@ -233,6 +241,16 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 }
 
 func (s *Slot) doCommitPhase() {
+	if s.nextRoundTimer != nil {
+		if !s.nextRoundTimer.Stop() {
+			// To prevent a timer created with NewTimer from firing after a
+			// call to Stop, check the return value and drain the
+			// channel. https://golang.org/pkg/time/#Timer.Stop
+			<-s.nextRoundTimer.C
+		}
+		s.nextRoundTimer = nil
+	}
+
 	s.updateP()
 	s.updateAcceptsCommitBounds()
 	s.updateB()
@@ -442,42 +460,63 @@ func round(d time.Duration) int {
 	return 1 + int((r-5.0)/2.0)
 }
 
+func (s *Slot) roundTime(r int) time.Time {
+	r--
+	intervals := r * (r + 5) / 2
+	return s.T.Add(time.Duration(intervals * int(NomRoundInterval)))
+}
+
+func (s *Slot) newRound() error {
+	if s.nextRoundTimer == nil {
+		return nil
+	}
+
+	curRound := s.Round()
+
+	for r := s.lastRound + 1; r <= curRound; r++ {
+		peerID, err := s.findMaxPriPeer(r)
+		if err != nil {
+			return err
+		}
+		s.maxPriPeers = s.maxPriPeers.Add(peerID)
+	}
+	s.lastRound = curRound
+
+	s.V.rehandle(s)
+
+	dur := time.Until(s.roundTime(curRound + 1))
+	s.nextRoundTimer = time.AfterFunc(dur, func() {
+		s.V.newRound(s)
+	})
+	return nil
+}
+
+func (s *Slot) findMaxPriPeer(r int) (NodeID, error) {
+	neighbors, err := s.V.Neighbors(s.ID, r)
+	if err != nil {
+		return "", err
+	}
+	var (
+		maxPriority [32]byte
+		result      NodeID
+	)
+	for _, neighbor := range neighbors {
+		priority, err := s.V.Priority(s.ID, r, neighbor)
+		if err != nil {
+			return "", err
+		}
+		if bytes.Compare(priority[:], maxPriority[:]) > 0 {
+			maxPriority = priority
+			result = neighbor
+		}
+	}
+	return result, nil
+}
+
 // Tells whether the given peer has or had the maximum priority in the
 // current or any earlier nomination round.
-func (s *Slot) maxPrioritySender(nodeID NodeID) (bool, error) {
-	round := s.Round()
-
-	// xxx
-	n := len(s.maxPriPeers)
-
-	for r := s.nextRound; r <= round; r++ {
-		neighbors, err := s.V.Neighbors(s.ID, r)
-		if err != nil {
-			return false, err
-		}
-		var (
-			maxPriority [32]byte
-			sender      NodeID
-		)
-		for _, neighbor := range neighbors {
-			priority, err := s.V.Priority(s.ID, r, neighbor)
-			if err != nil {
-				return false, err
-			}
-			if bytes.Compare(priority[:], maxPriority[:]) > 0 {
-				maxPriority = priority
-				sender = neighbor
-			}
-		}
-		s.maxPriPeers = s.maxPriPeers.Add(sender)
-	}
-
-	if len(s.maxPriPeers) > n {
-		s.Logf("round %d: added %d maxPriPeer(s)", round, len(s.maxPriPeers)-n)
-	}
-
-	s.nextRound = round + 1
-	return s.maxPriPeers.Contains(nodeID), nil
+func (s *Slot) maxPrioritySender(nodeID NodeID) bool {
+	return s.maxPriPeers.Contains(nodeID)
 }
 
 func (s *Slot) updateYZ() {

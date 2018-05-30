@@ -11,3 +11,11 @@ type msgCmd struct {
 type deferredUpdateCmd struct {
 	slotID SlotID
 }
+
+type newRoundCmd struct {
+	slot *Slot
+}
+
+type rehandleCmd struct {
+	slot *Slot
+}

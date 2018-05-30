@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"log"
 	"math/big"
 	"sync"
@@ -63,25 +64,22 @@ const idleInterval = time.Second
 // its context is canceled and should be launched as a goroutine.
 func (n *Node) Run(ctx context.Context) {
 	for {
-		timer := time.NewTimer(idleInterval)
-
 		select {
 		case <-ctx.Done():
 			n.Logf("context canceled, Run exiting")
 			return
 
 		case cmd := <-n.recv:
-			// Not idle.
-			if !timer.Stop() {
-				<-timer.C
-			}
-
 			switch cmd := cmd.(type) {
 			case *msgCmd:
-				err := n.handle(cmd.msg)
-				if err != nil {
-					n.Logf("ERROR %s", err)
-				}
+				func() {
+					n.mu.Lock()
+					defer n.mu.Unlock()
+					err := n.handle(cmd.msg)
+					if err != nil {
+						n.Logf("ERROR %s", err)
+					}
+				}()
 
 			case *deferredUpdateCmd:
 				func() {
@@ -91,31 +89,39 @@ func (n *Node) Run(ctx context.Context) {
 						s.deferredUpdate()
 					}
 				}()
-			}
 
-		case <-timer.C:
-			// Re-handle all messages in all pending slots.
-			// TODO: Don't do this every second. Schedule a single
-			// re-handling per nomination round.
-			err := func() error {
-				n.mu.Lock()
-				defer n.mu.Unlock()
+			case *newRoundCmd:
+				func() {
+					n.mu.Lock()
+					defer n.mu.Unlock()
+					err := cmd.slot.newRound()
+					if err != nil {
+						n.Logf("ERROR %s", err)
+					}
+				}()
 
-				for _, s := range n.pending {
-					for _, msg := range s.M {
+			case *rehandleCmd:
+				func() {
+					n.mu.Lock()
+					defer n.mu.Unlock()
+					for _, msg := range cmd.slot.M {
 						err := n.handle(msg)
 						if err != nil {
-							return err
+							n.Logf("ERROR %s", err)
 						}
 					}
-				}
-				return nil
-			}()
-			if err != nil {
-				n.Logf("ERROR %s", err)
+				}()
 			}
 		}
 	}
+}
+
+func (n *Node) newRound(s *Slot) {
+	n.recv <- &newRoundCmd{slot: s}
+}
+
+func (n *Node) rehandle(s *Slot) {
+	n.recv <- &rehandleCmd{slot: s}
 }
 
 // Handle queues an incoming protocol message. When processed it will
@@ -147,7 +153,11 @@ func (n *Node) handle(msg *Msg) error {
 
 	s, ok := n.pending[msg.I]
 	if !ok {
-		s = newSlot(msg.I, n)
+		var err error
+		s, err = newSlot(msg.I, n)
+		if err != nil {
+			panic(fmt.Sprintf("cannot create slot %d: %s", msg.I, err))
+		}
 		n.pending[msg.I] = s
 	}
 
