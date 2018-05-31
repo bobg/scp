@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/bobg/scp"
+	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
 )
 
@@ -29,12 +30,32 @@ func nominate(ctx context.Context) {
 			timestampMS = snapshot.Header.TimestampMs + 1 // xxx sleep until this time? error out?
 		}
 
-		ublock, _, err := chain.GenerateBlock(ctx, snapshot, timestampMS, txs)
+		// TODO: reuse a builder object
+		bb := protocol.NewBlockBuilder()
+
+		// generate a new block
+		err := bb.Start(snapshot, timestampMS)
 		if err != nil {
 			return err
 		}
-		// xxx figure out which txs GenerateBlock removed as invalid, and remove them from txpool
-
+		for _, tx := range txs {
+			err = bb.AddTx(tx)
+			if err == nil {
+				continue
+			}
+			// TODO: There are other errors (from ApplyTx) that should cause
+			// the tx to be removed from the pool, but those aren't
+			// exported.
+			if err == protocol.ErrTxTooOld {
+				node.Logf("removing tx %x from the pool: %s", tx.Tx.ID.Bytes(), err)
+			} else {
+				node.Logf("skipping tx %x in this block, will retry: %s", tx.Tx.ID.Bytes(), err)
+			}
+		}
+		ublock, _, err := bb.Build()
+		if err != nil {
+			return err
+		}
 		block, err := bc.SignBlock(ublock, snapshot.Header, nil)
 		if err != nil {
 			return err

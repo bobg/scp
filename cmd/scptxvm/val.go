@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/bobg/scp"
+	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
 )
 
@@ -117,9 +118,8 @@ func (v valtype) Combine(otherval scp.Value, slotID scp.SlotID) scp.Value {
 	if b2.TimestampMs < timestampMS {
 		timestampMS = b2.TimestampMs
 	}
-	snapshot := chain.State()
-	ublock, _, err := chain.GenerateBlock(bgctx, snapshot, timestampMS, cmtxs)
-	if err != nil {
+
+	dflt := func() valtype {
 		// Cannot make a block from the combined set of txs. Choose one of
 		// the input blocks as the winner.
 		if slotID%2 == 0 {
@@ -128,9 +128,29 @@ func (v valtype) Combine(otherval scp.Value, slotID scp.SlotID) scp.Value {
 		return other
 	}
 
+	// TODO: reuse a builder object
+	bb := protocol.NewBlockBuilder()
+
+	snapshot := chain.State()
+	err = bb.Start(snapshot, timestampMS)
+	if err != nil {
+		return dflt()
+	}
+
+	for _, tx := range cmtxs {
+		err = bb.AddTx(tx)
+		if err != nil {
+			return dflt()
+		}
+	}
+	ublock, _, err := bb.Build()
+	if err != nil {
+		return dflt()
+	}
+
 	block, err := bc.SignBlock(ublock, snapshot.Header, nil)
 	if err != nil {
-		panic(err)
+		return dflt()
 	}
 
 	err = storeBlock(block)

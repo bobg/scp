@@ -41,7 +41,7 @@ func TestFindBlockingSet(t *testing.T) {
 			network := toNetwork(tc.network)
 			ch := make(chan *Msg)
 			node := NewNode("x", network["x"], ch, nil)
-			slot := newSlot(1, node)
+			slot, _ := newSlot(1, node)
 			for _, vstr := range strings.Fields(tc.msgs) {
 				v := NodeID(vstr)
 				slot.M[v] = &Msg{
