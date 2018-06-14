@@ -586,13 +586,17 @@ func (s *Slot) updateP() {
 		}
 	})
 	if len(nodeIDs) > 0 {
-		// Exclude ballots higher than s.B
-		for len(apOut) > 0 && s.B.Less(apOut[len(apOut)-1]) {
+		// Exclude ballots with N > B.N
+		for len(apOut) > 0 && s.P.N > s.B.N {
 			apOut = apOut[:len(apOut)-1]
 		}
 		if len(apOut) > 0 {
 			s.P = apOut[len(apOut)-1]
+			if s.P.N == s.B.N && s.B.X.Less(s.P.X) {
+				s.P.N--
+			}
 			if s.Ph == PhPrep {
+				s.PP = ZeroBallot
 				for i := len(apOut) - 2; i >= 0; i-- {
 					ap := apOut[i]
 					if ap.N < s.P.N && !ValueEqual(ap.X, s.P.X) {
