@@ -15,7 +15,7 @@ type SlotID int
 type Slot struct {
 	ID   SlotID
 	V    *Node
-	Ph   Phase           // PhNom -> PhPrep -> PhCommit -> PhExt
+	Ph   Phase           // PhNom -> PhNomPrep -> PhPrep -> PhCommit -> PhExt
 	M    map[NodeID]*Msg // latest message from each peer
 	sent Topic           // latest message sent
 
@@ -40,6 +40,7 @@ type Phase int
 
 const (
 	PhNom Phase = iota
+	PhNomPrep
 	PhPrep
 	PhCommit
 	PhExt
@@ -49,6 +50,7 @@ func newSlot(id SlotID, n *Node) (*Slot, error) {
 	s := &Slot{
 		ID: id,
 		V:  n,
+		Ph: PhNom,
 		T:  time.Now(),
 		M:  make(map[NodeID]*Msg),
 	}
@@ -91,7 +93,7 @@ var (
 // message to help other nodes confirm "a" more efficiently by pruning
 // their quorum search at "v".")
 func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
-	if s.V.ID == msg.V && s.Ph != PhNom {
+	if s.V.ID == msg.V && !s.isNomPhase() {
 		// A node doesn't message itself except during nomination.
 		return nil, nil
 	}
@@ -120,19 +122,20 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 		s.M[msg.V] = msg
 	}
 
-	if s.Ph == PhNom {
+	if s.isNomPhase() {
 		err = s.doNomPhase(msg)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if s.Ph == PhPrep {
+	if s.isPrepPhase() {
 		err = s.doPrepPhase(msg)
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	if s.Ph == PhCommit {
 		s.doCommitPhase()
 	}
@@ -140,25 +143,26 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 	return s.Msg(), nil
 }
 
+func (s *Slot) isNomPhase() bool {
+	return s.Ph == PhNom || s.Ph == PhNomPrep
+}
+
+func (s *Slot) isPrepPhase() bool {
+	return s.Ph == PhNomPrep || s.Ph == PhPrep
+}
+
 func (s *Slot) doNomPhase(msg *Msg) error {
 	if s.maxPrioritySender(msg.V) {
 		// "Echo" nominated values by adding them to s.X.
-		switch topic := msg.T.(type) {
-		case *NomTopic:
+		f := func(topic *NomTopic) {
 			s.X = s.X.Union(topic.X)
 			s.X = s.X.Union(topic.Y)
-		case *PrepTopic:
-			s.X = s.X.Add(topic.B.X)
-			if !topic.P.IsZero() {
-				s.X = s.X.Add(topic.P.X)
-			}
-			if !topic.PP.IsZero() {
-				s.X = s.X.Add(topic.PP.X)
-			}
-		case *CommitTopic:
-			s.X = s.X.Add(topic.B.X)
-		case *ExtTopic:
-			s.X = s.X.Add(topic.C.X)
+		}
+		switch topic := msg.T.(type) {
+		case *NomTopic:
+			f(topic)
+		case *NomPrepTopic:
+			f(&topic.NomTopic)
 		}
 	}
 
@@ -167,35 +171,45 @@ func (s *Slot) doNomPhase(msg *Msg) error {
 	s.updateYZ()
 
 	if len(s.Z) > 0 {
+		// Some value is confirmed nominated. End NOMINATE phase and begin
+		// or continue PREPARE phase.
 		s.Ph = PhPrep
 		s.B.N = 1
 		s.setBX()
+	} else {
+		s.updateP()
+		if s.Ph == PhNom && !s.P.IsZero() {
+			s.Ph = PhNomPrep
+			s.B.N = 1
+			s.setBX()
+		}
 	}
 
 	return nil
 }
 
 func (s *Slot) doPrepPhase(msg *Msg) error {
-	if topic, ok := msg.T.(*NomTopic); ok {
-		if s.H.N == 0 {
-			// Can still update s.Z and s.B.X
+	if s.Ph == PhNomPrep {
+		f := func(topic *NomTopic) {
 			if s.maxPrioritySender(msg.V) {
 				s.X = s.X.Union(topic.X)
 				s.X = s.X.Union(topic.Y)
 				s.updateYZ()
-
-				if false {
-					// xxx do not update except when updating s.B.N
-					s.B.X = s.Z.Combine(s.ID) // xxx does this require changing s.B.N?
-				}
 			}
 		}
-		return nil
+		switch topic := msg.T.(type) {
+		case *NomTopic:
+			f(topic)
+
+		case *NomPrepTopic:
+			f(&topic.NomTopic)
+		}
 	}
 
-	s.updateP()
+	s.updateP() // xxx maybe redundant if doNomPhase already called it
 
 	// Update s.H, the highest confirmed-prepared ballot.
+	s.H = ZeroBallot
 	var cpIn, cpOut BallotSet
 	if !s.P.IsZero() {
 		cpIn = cpIn.Add(s.P)
@@ -212,8 +226,12 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 	})
 	if len(nodeIDs) > 0 {
 		h := cpOut[len(cpOut)-1]
-		if s.H.Less(h) {
+		if ValueEqual(s.B.X, h.X) {
 			s.H = h
+		}
+		if s.Ph == PhNomPrep {
+			// Some ballot is confirmed prepared, exit NOMINATE phase.
+			s.Ph = PhPrep
 		}
 	}
 
@@ -225,7 +243,7 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 			s.C = ZeroBallot
 		}
 	}
-	if s.C.IsZero() && !s.H.IsZero() && !s.P.Aborts(s.H) && !s.PP.Aborts(s.H) {
+	if s.C.IsZero() && s.H.N == s.B.N {
 		s.C = s.B
 	}
 
@@ -312,6 +330,21 @@ func (s *Slot) Msg() *Msg {
 		msg.T = &NomTopic{
 			X: s.X,
 			Y: s.Y,
+		}
+
+	case PhNomPrep:
+		msg.T = &NomPrepTopic{
+			NomTopic: NomTopic{
+				X: s.X,
+				Y: s.Y,
+			},
+			PrepTopic: PrepTopic{
+				B:  s.B,
+				P:  s.P,
+				PP: s.PP,
+				HN: s.H.N,
+				CN: s.C.N,
+			},
 		}
 
 	case PhPrep:
@@ -437,10 +470,15 @@ func (s *Slot) setBX() {
 	if s.Ph >= PhCommit {
 		return
 	}
-	if !s.H.IsZero() {
+	switch {
+	case !s.H.IsZero():
 		s.B.X = s.H.X
-	} else {
+
+	case len(s.Z) > 0:
 		s.B.X = s.Z.Combine(s.ID)
+
+	case !s.P.IsZero():
+		s.B.X = s.P.X
 	}
 }
 
@@ -586,13 +624,17 @@ func (s *Slot) updateP() {
 		}
 	})
 	if len(nodeIDs) > 0 {
-		// Exclude ballots with N > B.N
-		for len(apOut) > 0 && s.P.N > s.B.N {
-			apOut = apOut[:len(apOut)-1]
+		if !s.B.IsZero() {
+			// Exclude ballots with N > B.N, if s.B is set.
+			// If it's not set, we're still in NOMINATE phase and can set
+			// s.P to anything.
+			for len(apOut) > 0 && s.P.N > s.B.N {
+				apOut = apOut[:len(apOut)-1]
+			}
 		}
 		if len(apOut) > 0 {
 			s.P = apOut[len(apOut)-1]
-			if s.P.N == s.B.N && s.B.X.Less(s.P.X) {
+			if !s.B.IsZero() && s.P.N == s.B.N && s.B.X.Less(s.P.X) {
 				s.P.N--
 			}
 			if s.Ph == PhPrep {

@@ -13,7 +13,7 @@ type Msg struct {
 	V NodeID      // ID of the node sending this message.
 	I SlotID      // ID of the slot that this message is about.
 	Q []NodeIDSet // Quorum slices of the sending node.
-	T Topic       // The payload: a *NomTopic, *PrepTopic, *CommitTopic, or *ExtTopic.
+	T Topic       // The payload: a *NomTopic, a *NomPrepTopic, *PrepTopic, *CommitTopic, or *ExtTopic.
 }
 
 var msgCounter int32
@@ -37,13 +37,13 @@ func (e *Msg) valid() (err error) {
 		}
 	}()
 
-	switch topic := e.T.(type) {
-	case *NomTopic:
+	nom := func(topic *NomTopic) error {
 		if len(topic.X.Intersection(topic.Y)) != 0 {
 			return errors.New("non-empty intersection between X and Y")
 		}
-
-	case *PrepTopic:
+		return nil
+	}
+	prep := func(topic *PrepTopic) error {
 		if !topic.P.IsZero() {
 			if topic.B.Less(topic.P) {
 				return errors.New("P > B")
@@ -58,6 +58,25 @@ func (e *Msg) valid() (err error) {
 		if topic.HN > topic.B.N {
 			return errors.New("HN > BN")
 		}
+		return nil
+	}
+
+	switch topic := e.T.(type) {
+	case *NomTopic:
+		err := nom(topic)
+		if err != nil {
+			return err
+		}
+
+	case *NomPrepTopic:
+		err := nom(&topic.NomTopic)
+		if err != nil {
+			return err
+		}
+		return prep(&topic.PrepTopic)
+
+	case *PrepTopic:
+		return prep(topic)
 
 	case *CommitTopic:
 		if topic.CN > topic.HN {
@@ -70,6 +89,9 @@ func (e *Msg) valid() (err error) {
 // Return the ballot counter (if any).
 func (e *Msg) bN() int {
 	switch topic := e.T.(type) {
+	case *NomPrepTopic:
+		return topic.B.N
+
 	case *PrepTopic:
 		return topic.B.N
 
@@ -85,8 +107,14 @@ func (e *Msg) bN() int {
 // Returns the set of values that e votes or accepts as nominated.
 func (e *Msg) votesOrAcceptsNominatedSet() ValueSet {
 	result := e.acceptsNominatedSet()
-	if topic, ok := e.T.(*NomTopic); ok {
+	f := func(topic *NomTopic) {
 		result = result.Union(topic.X)
+	}
+	switch topic := e.T.(type) {
+	case *NomTopic:
+		f(topic)
+	case *NomPrepTopic:
+		f(&topic.NomTopic)
 	}
 	return result
 }
@@ -97,22 +125,8 @@ func (e *Msg) acceptsNominatedSet() ValueSet {
 	case *NomTopic:
 		return topic.Y
 
-	case *PrepTopic:
-		var s ValueSet
-		s = s.Add(topic.B.X)
-		if !topic.P.IsZero() {
-			s = s.Add(topic.P.X)
-		}
-		if !topic.PP.IsZero() {
-			s = s.Add(topic.PP.X)
-		}
-		return s
-
-	case *CommitTopic:
-		return ValueSet{topic.B.X}
-
-	case *ExtTopic:
-		return ValueSet{topic.C.X}
+	case *NomPrepTopic:
+		return topic.Y
 	}
 	return nil // not reached
 }
@@ -120,9 +134,16 @@ func (e *Msg) acceptsNominatedSet() ValueSet {
 // Returns the set of ballots for which e votes or accepts "prepared."
 func (e *Msg) votesOrAcceptsPreparedSet() BallotSet {
 	result := e.acceptsPreparedSet()
-	switch topic := e.T.(type) {
-	case *PrepTopic:
+	f := func(topic *PrepTopic) {
 		result = result.Add(topic.B)
+	}
+
+	switch topic := e.T.(type) {
+	case *NomPrepTopic:
+		f(&topic.PrepTopic)
+
+	case *PrepTopic:
+		f(topic)
 
 	case *CommitTopic:
 		result = result.Add(Ballot{N: math.MaxInt32, X: topic.B.X})
@@ -133,8 +154,7 @@ func (e *Msg) votesOrAcceptsPreparedSet() BallotSet {
 // Returns the set of ballots that e accepts as prepared.
 func (e *Msg) acceptsPreparedSet() BallotSet {
 	var result BallotSet
-	switch topic := e.T.(type) {
-	case *PrepTopic:
+	f := func(topic *PrepTopic) {
 		if !topic.P.IsZero() {
 			result = result.Add(topic.P)
 			if !topic.PP.IsZero() {
@@ -144,6 +164,13 @@ func (e *Msg) acceptsPreparedSet() BallotSet {
 		if topic.HN > 0 {
 			result = result.Add(Ballot{N: topic.HN, X: topic.B.X})
 		}
+	}
+	switch topic := e.T.(type) {
+	case *NomPrepTopic:
+		f(&topic.PrepTopic)
+
+	case *PrepTopic:
+		f(topic)
 
 	case *CommitTopic:
 		result = result.Add(Ballot{N: topic.PN, X: topic.B.X})
@@ -165,8 +192,7 @@ func (e *Msg) votesOrAcceptsCommit(v Value, min, max int) (bool, int, int) {
 		// "accepts" and not yet for "votes." do we care?
 		return true, newMin, newMax
 	}
-	switch topic := e.T.(type) {
-	case *PrepTopic:
+	f := func(topic *PrepTopic) (bool, int, int) {
 		if topic.CN == 0 || !ValueEqual(topic.B.X, v) {
 			return false, 0, 0
 		}
@@ -180,6 +206,13 @@ func (e *Msg) votesOrAcceptsCommit(v Value, min, max int) (bool, int, int) {
 			max = topic.HN
 		}
 		return true, min, max
+	}
+	switch topic := e.T.(type) {
+	case *NomPrepTopic:
+		return f(&topic.PrepTopic)
+
+	case *PrepTopic:
+		return f(topic)
 
 	case *CommitTopic:
 		if !ValueEqual(topic.B.X, v) {

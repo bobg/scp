@@ -4,7 +4,7 @@ import "fmt"
 
 // Topic is the abstract type of the payload of an SCP message
 // (conveyed in an envelope, see type Msg). The concrete type is one
-// of NomTopic, PrepTopic, CommitTopic, and ExtTopic.
+// of NomTopic, NomPrepTopic, PrepTopic, CommitTopic, and ExtTopic.
 type Topic interface {
 	Less(Topic) bool
 	String() string
@@ -33,6 +33,36 @@ func (nt *NomTopic) String() string {
 	return fmt.Sprintf("NOM X=%s, Y=%s", nt.X, nt.Y)
 }
 
+// NomPrepTopic is the combined payload of a NOMINATE and a PREPARE
+// message.
+type NomPrepTopic struct {
+	NomTopic
+	PrepTopic
+}
+
+func (npt *NomPrepTopic) Less(other Topic) bool {
+	switch other := other.(type) {
+	case *NomTopic:
+		return false
+
+	case *NomPrepTopic:
+		if npt.NomTopic.Less(&other.NomTopic) {
+			return true
+		}
+		if other.NomTopic.Less(&npt.NomTopic) {
+			return false
+		}
+		return npt.PrepTopic.Less(&other.PrepTopic)
+
+	default:
+		return true
+	}
+}
+
+func (npt *NomPrepTopic) String() string {
+	return fmt.Sprintf("NOM/PREP X=%s, Y=%s B=%s P=%s PP=%s CN=%d HN=%d", npt.X, npt.Y, npt.B, npt.P, npt.PP, npt.CN, npt.HN)
+}
+
 // PrepTopic is the payload of a PREPARE message in the ballot protocol.
 type PrepTopic struct {
 	B, P, PP Ballot
@@ -42,6 +72,8 @@ type PrepTopic struct {
 func (pt *PrepTopic) Less(other Topic) bool {
 	switch other := other.(type) {
 	case *NomTopic:
+		return false
+	case *NomPrepTopic:
 		return false
 	case *PrepTopic:
 		if pt.B.Less(other.B) {
@@ -81,6 +113,8 @@ type CommitTopic struct {
 func (ct *CommitTopic) Less(other Topic) bool {
 	switch other := other.(type) {
 	case *NomTopic:
+		return false
+	case *NomPrepTopic:
 		return false
 	case *PrepTopic:
 		return false
