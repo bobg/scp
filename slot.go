@@ -174,6 +174,7 @@ func (s *Slot) doNomPhase(msg *Msg) error {
 		// Some value is confirmed nominated. End NOMINATE phase and begin
 		// or continue PREPARE phase.
 		s.Ph = PhPrep
+		s.cancelRounds()
 		s.B.N = 1
 		s.setBX()
 	} else {
@@ -232,6 +233,7 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 		if s.Ph == PhNomPrep {
 			// Some ballot is confirmed prepared, exit NOMINATE phase.
 			s.Ph = PhPrep
+			s.cancelRounds()
 		}
 	}
 
@@ -239,11 +241,11 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 
 	// Update s.C.
 	if !s.C.IsZero() {
-		if (s.C.Less(s.P) && !ValueEqual(s.P.X, s.C.X)) || (s.C.Less(s.PP) && !ValueEqual(s.PP.X, s.C.X)) {
+		if s.H.N == 0 || (s.C.Less(s.P) && !ValueEqual(s.P.X, s.C.X)) || (s.C.Less(s.PP) && !ValueEqual(s.PP.X, s.C.X)) {
 			s.C = ZeroBallot
 		}
 	}
-	if s.C.IsZero() && s.H.N == s.B.N {
+	if s.C.IsZero() && s.H.N > 0 && s.H.N == s.B.N {
 		s.C = s.B
 	}
 
@@ -259,16 +261,7 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 }
 
 func (s *Slot) doCommitPhase() {
-	if s.nextRoundTimer != nil {
-		if !s.nextRoundTimer.Stop() {
-			// To prevent a timer created with NewTimer from firing after a
-			// call to Stop, check the return value and drain the
-			// channel. https://golang.org/pkg/time/#Timer.Stop
-			<-s.nextRoundTimer.C
-		}
-		s.nextRoundTimer = nil
-	}
-
+	s.cancelRounds()
 	s.updateP()
 	s.updateAcceptsCommitBounds()
 	s.updateB()
@@ -291,6 +284,19 @@ func (s *Slot) doCommitPhase() {
 		s.H.N = hn
 		s.cancelUpd()
 	}
+}
+
+func (s *Slot) cancelRounds() {
+	if s.nextRoundTimer == nil {
+		return
+	}
+	if !s.nextRoundTimer.Stop() {
+		// To prevent a timer created with NewTimer from firing after a
+		// call to Stop, check the return value and drain the
+		// channel. https://golang.org/pkg/time/#Timer.Stop
+		<-s.nextRoundTimer.C
+	}
+	s.nextRoundTimer = nil
 }
 
 func (s *Slot) updateAcceptsCommitBounds() bool {
@@ -400,9 +406,11 @@ func (s *Slot) deferredUpdate() {
 	s.B.N++
 	s.setBX()
 
-	s.Logf("deferred update, B is now %s", s.B)
+	msg := s.Msg()
 
-	s.V.send <- s.Msg()
+	s.Logf("deferred update: %s", msg)
+
+	s.V.send <- msg
 }
 
 func (s *Slot) cancelUpd() {
@@ -450,6 +458,7 @@ func (s *Slot) updateB() {
 		if len(nodeIDs) == 0 {
 			break
 		}
+		s.Logf("found blocking set with B.N > %d: %v", s.B.N, nodeIDs)
 		doSetBX = true
 		s.cancelUpd()
 		for i, nodeID := range nodeIDs {
