@@ -123,17 +123,11 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 	}
 
 	if s.isNomPhase() {
-		err = s.doNomPhase(msg)
-		if err != nil {
-			return nil, err
-		}
+		s.doNomPhase(msg)
 	}
 
 	if s.isPrepPhase() {
-		err = s.doPrepPhase(msg)
-		if err != nil {
-			return nil, err
-		}
+		s.doPrepPhase(msg)
 	}
 
 	if s.Ph == PhCommit {
@@ -151,7 +145,7 @@ func (s *Slot) isPrepPhase() bool {
 	return s.Ph == PhNomPrep || s.Ph == PhPrep
 }
 
-func (s *Slot) doNomPhase(msg *Msg) error {
+func (s *Slot) doNomPhase(msg *Msg) {
 	if s.maxPrioritySender(msg.V) {
 		// "Echo" nominated values by adding them to s.X.
 		f := func(topic *NomTopic) {
@@ -185,29 +179,12 @@ func (s *Slot) doNomPhase(msg *Msg) error {
 			s.setBX()
 		}
 	}
-
-	return nil
 }
 
-func (s *Slot) doPrepPhase(msg *Msg) error {
-	if s.Ph == PhNomPrep {
-		f := func(topic *NomTopic) {
-			if s.maxPrioritySender(msg.V) {
-				s.X = s.X.Union(topic.X)
-				s.X = s.X.Union(topic.Y)
-				s.updateYZ()
-			}
-		}
-		switch topic := msg.T.(type) {
-		case *NomTopic:
-			f(topic)
-
-		case *NomPrepTopic:
-			f(&topic.NomTopic)
-		}
+func (s *Slot) doPrepPhase(msg *Msg) {
+	if !s.isNomPhase() { // If isNomPhase is true, updateP was already called.
+		s.updateP()
 	}
-
-	s.updateP() // xxx maybe redundant if doNomPhase already called it
 
 	// Update s.H, the highest confirmed-prepared ballot.
 	s.H = ZeroBallot
@@ -256,8 +233,6 @@ func (s *Slot) doPrepPhase(msg *Msg) error {
 		// Accept commit(<n, s.B.X>).
 		s.Ph = PhCommit
 	}
-
-	return nil
 }
 
 func (s *Slot) doCommitPhase() {
