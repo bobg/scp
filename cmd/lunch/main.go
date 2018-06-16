@@ -96,58 +96,43 @@ func main() {
 			node.Handle(nomMsg)
 		}
 
-		for msg := range ch {
-			if msg.I < slotID {
-				// discard messages about old slots
-				continue
-			}
-			n := nodes[msg.V]
-
-			if false { // xxx
-				if msgs[msg.V] == nil {
-					n.Logf("%s", msg)
-				} else {
-					switch msgs[msg.V].T.(type) {
-					case *scp.NomTopic:
-						if _, ok := msg.T.(*scp.PrepTopic); ok {
-							n.Logf("%s", msg)
-						}
-					case *scp.PrepTopic:
-						if _, ok := msg.T.(*scp.CommitTopic); ok {
-							n.Logf("%s", msg)
-						}
-					case *scp.CommitTopic:
-						if _, ok := msg.T.(*scp.ExtTopic); ok {
-							n.Logf("%s", msg)
-						}
-					}
-				}
-			}
-			msgs[msg.V] = msg
-
-			allExt := true
-			for _, m := range msgs {
-				if m == nil {
-					allExt = false
-					break
-				}
-				if _, ok := m.T.(*scp.ExtTopic); !ok {
-					allExt = false
-					break
-				}
-			}
-			if allExt {
-				log.Print("all externalized")
-				break
-			}
-
-			// Send this message to every other node.
-			// TODO: every other node with msg.V among its peers.
-			for otherNodeID, otherNode := range nodes {
-				if otherNodeID == msg.V {
+		toSend := make(map[scp.NodeID]*scp.Msg)
+		for looping := true; looping; {
+			select {
+			case msg := <-ch:
+				if msg.I < slotID {
+					// discard messages about old slots
 					continue
 				}
-				otherNode.Handle(msg)
+				msgs[msg.V] = msg
+				allExt := true
+				for _, m := range msgs {
+					if m == nil {
+						allExt = false
+						break
+					}
+					if _, ok := m.T.(*scp.ExtTopic); !ok {
+						allExt = false
+						break
+					}
+				}
+				if allExt {
+					log.Print("all externalized")
+					looping = false
+					break
+				}
+				toSend[msg.V] = msg
+
+			default:
+				for nodeID, msg := range toSend {
+					for otherNodeID, otherNode := range nodes {
+						if otherNodeID == nodeID {
+							continue
+						}
+						otherNode.Handle(msg)
+					}
+				}
+				toSend = make(map[scp.NodeID]*scp.Msg)
 			}
 		}
 	}

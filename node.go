@@ -85,9 +85,7 @@ func (n *Node) Run(ctx context.Context) {
 				func() {
 					n.mu.Lock()
 					defer n.mu.Unlock()
-					if s := n.pending[cmd.slotID]; s != nil {
-						s.deferredUpdate()
-					}
+					cmd.slot.deferredUpdate()
 				}()
 
 			case *newRoundCmd:
@@ -114,6 +112,10 @@ func (n *Node) Run(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (n *Node) deferredUpdate(s *Slot) {
+	n.recv <- &deferredUpdateCmd{slot: s}
 }
 
 func (n *Node) newRound(s *Slot) {

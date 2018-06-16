@@ -104,12 +104,16 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 	}
 
 	defer func() {
-		if err == nil && resp != nil {
-			if reflect.DeepEqual(resp.T, s.sent) {
-				resp = nil
-			} else {
-				s.sent = resp.T
-				s.Logf("%s -> %s", msg, resp)
+		if err == nil {
+			if resp != nil {
+				if reflect.DeepEqual(resp.T, s.sent) {
+					resp = nil
+				} else {
+					s.sent = resp.T
+				}
+			}
+			if true { // or if resp != nil
+				s.Logf("%s -> %v", msg, resp)
 			}
 		}
 	}()
@@ -369,7 +373,9 @@ func (s *Slot) maybeScheduleUpd() {
 	if len(nodeIDs) == 0 {
 		return
 	}
-	s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(DeferredUpdateInterval)), s.deferredUpdate)
+	s.Upd = time.AfterFunc(time.Duration((1+s.B.N)*int(DeferredUpdateInterval)), func() {
+		s.V.deferredUpdate(s)
+	})
 }
 
 func (s *Slot) deferredUpdate() {
@@ -433,7 +439,6 @@ func (s *Slot) updateB() {
 		if len(nodeIDs) == 0 {
 			break
 		}
-		s.Logf("found blocking set with B.N > %d: %v", s.B.N, nodeIDs)
 		doSetBX = true
 		s.cancelUpd()
 		for i, nodeID := range nodeIDs {
@@ -503,6 +508,7 @@ func (s *Slot) newRound() error {
 		s.maxPriPeers = s.maxPriPeers.Add(peerID)
 	}
 	s.lastRound = curRound
+	s.Logf("round %d, peers %v", curRound, s.maxPriPeers)
 
 	s.V.rehandle(s)
 

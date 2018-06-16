@@ -9,7 +9,7 @@ type msgCmd struct {
 }
 
 type deferredUpdateCmd struct {
-	slotID SlotID
+	slot *Slot
 }
 
 type newRoundCmd struct {
