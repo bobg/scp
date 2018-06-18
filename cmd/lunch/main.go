@@ -124,15 +124,17 @@ func main() {
 				toSend[msg.V] = msg
 
 			default:
-				for nodeID, msg := range toSend {
-					for otherNodeID, otherNode := range nodes {
-						if otherNodeID == nodeID {
-							continue
+				if len(toSend) > 0 {
+					for nodeID, msg := range toSend {
+						for otherNodeID, otherNode := range nodes {
+							if otherNodeID == nodeID {
+								continue
+							}
+							otherNode.Handle(msg)
 						}
-						otherNode.Handle(msg)
 					}
+					toSend = make(map[scp.NodeID]*scp.Msg)
 				}
-				toSend = make(map[scp.NodeID]*scp.Msg)
 			}
 		}
 	}

@@ -56,10 +56,6 @@ func NewNode(id NodeID, q []NodeIDSet, ch chan<- *Msg, ext map[SlotID]*ExtTopic)
 	}
 }
 
-// After this much idle time, wake up and reconsider every known
-// message for every pending slot.
-const idleInterval = time.Second
-
 // Run processes incoming events for the node. It returns only when
 // its context is canceled and should be launched as a goroutine.
 func (n *Node) Run(ctx context.Context) {

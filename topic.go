@@ -26,7 +26,7 @@ func (nt *NomTopic) Less(other Topic) bool {
 	if len(nt.Y) > len(o.Y) {
 		return false
 	}
-	return len(nt.X) < len(nt.Y)
+	return len(nt.X) < len(o.X)
 }
 
 func (nt *NomTopic) String() string {

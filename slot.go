@@ -54,19 +54,13 @@ func newSlot(id SlotID, n *Node) (*Slot, error) {
 		T:  time.Now(),
 		M:  make(map[NodeID]*Msg),
 	}
-
 	peerID, err := s.findMaxPriPeer(1)
 	if err != nil {
 		return nil, err
 	}
 	s.maxPriPeers = s.maxPriPeers.Add(peerID)
 	s.lastRound = 1
-
-	dur := time.Until(s.roundTime(2))
-	s.nextRoundTimer = time.AfterFunc(dur, func() {
-		s.V.newRound(s)
-	})
-
+	s.scheduleRound()
 	return s, nil
 }
 
@@ -112,7 +106,7 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 					s.sent = resp.T
 				}
 			}
-			if true { // or if resp != nil
+			if resp != nil {
 				s.Logf("%s -> %v", msg, resp)
 			}
 		}
@@ -131,7 +125,7 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 	}
 
 	if s.isPrepPhase() {
-		s.doPrepPhase(msg)
+		s.doPrepPhase()
 	}
 
 	if s.Ph == PhCommit {
@@ -185,7 +179,7 @@ func (s *Slot) doNomPhase(msg *Msg) {
 	}
 }
 
-func (s *Slot) doPrepPhase(msg *Msg) {
+func (s *Slot) doPrepPhase() {
 	if !s.isNomPhase() { // If isNomPhase is true, updateP was already called.
 		s.updateP()
 	}
@@ -387,6 +381,13 @@ func (s *Slot) deferredUpdate() {
 	s.B.N++
 	s.setBX()
 
+	if s.isPrepPhase() {
+		s.doPrepPhase()
+	}
+	if s.Ph == PhCommit {
+		s.doCommitPhase()
+	}
+
 	msg := s.Msg()
 
 	s.Logf("deferred update: %s", msg)
@@ -495,6 +496,7 @@ func (s *Slot) roundTime(r int) time.Time {
 
 func (s *Slot) newRound() error {
 	if s.nextRoundTimer == nil {
+		s.Logf("newRound: abort")
 		return nil
 	}
 
@@ -507,16 +509,19 @@ func (s *Slot) newRound() error {
 		}
 		s.maxPriPeers = s.maxPriPeers.Add(peerID)
 	}
-	s.lastRound = curRound
 	s.Logf("round %d, peers %v", curRound, s.maxPriPeers)
-
+	s.lastRound = curRound
 	s.V.rehandle(s)
+	s.scheduleRound()
+	return nil
+}
 
-	dur := time.Until(s.roundTime(curRound + 1))
+func (s *Slot) scheduleRound() {
+	dur := time.Until(s.roundTime(s.lastRound + 1))
+	s.Logf("scheduling round %d for %s from now", s.lastRound+1, dur)
 	s.nextRoundTimer = time.AfterFunc(dur, func() {
 		s.V.newRound(s)
 	})
-	return nil
 }
 
 func (s *Slot) findMaxPriPeer(r int) (NodeID, error) {
