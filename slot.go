@@ -263,12 +263,7 @@ func (s *Slot) cancelRounds() {
 	if s.nextRoundTimer == nil {
 		return
 	}
-	if !s.nextRoundTimer.Stop() {
-		// To prevent a timer created with NewTimer from firing after a
-		// call to Stop, check the return value and drain the
-		// channel. https://golang.org/pkg/time/#Timer.Stop
-		<-s.nextRoundTimer.C
-	}
+	stopTimer(s.nextRoundTimer)
 	s.nextRoundTimer = nil
 }
 
@@ -399,12 +394,7 @@ func (s *Slot) cancelUpd() {
 	if s.Upd == nil {
 		return
 	}
-	if !s.Upd.Stop() {
-		// To prevent a timer created with NewTimer from firing after a
-		// call to Stop, check the return value and drain the
-		// channel. https://golang.org/pkg/time/#Timer.Stop
-		<-s.Upd.C
-	}
+	stopTimer(s.Upd)
 	s.Upd = nil
 }
 
@@ -650,4 +640,20 @@ func (s *Slot) Logf(f string, a ...interface{}) {
 	f = "slot %d: " + f
 	a = append([]interface{}{s.ID}, a...)
 	s.V.Logf(f, a...)
+}
+
+// To prevent a timer created with NewTimer from firing after a call
+// to Stop, check the return value and drain the
+// channel. https://golang.org/pkg/time/#Timer.Stop
+//
+// HOWEVER, it looks like a straight read of the timer's channel can
+// sometimes block even when Stop returns false. This works around
+// that by making the drain be non-blocking.
+func stopTimer(t *time.Timer) {
+	if !t.Stop() {
+		select {
+		case <-t.C:
+		default:
+		}
+	}
 }

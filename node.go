@@ -10,7 +10,6 @@ import (
 	"log"
 	"math/big"
 	"sync"
-	"time"
 
 	"github.com/davecgh/go-xdr/xdr"
 )
