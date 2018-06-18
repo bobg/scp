@@ -499,7 +499,7 @@ func (s *Slot) newRound() error {
 		}
 		s.maxPriPeers = s.maxPriPeers.Add(peerID)
 	}
-	s.Logf("round %d, peers %v", curRound, s.maxPriPeers)
+	// s.Logf("round %d, peers %v", curRound, s.maxPriPeers)
 	s.lastRound = curRound
 	s.V.rehandle(s)
 	s.scheduleRound()
@@ -508,7 +508,7 @@ func (s *Slot) newRound() error {
 
 func (s *Slot) scheduleRound() {
 	dur := time.Until(s.roundTime(s.lastRound + 1))
-	s.Logf("scheduling round %d for %s from now", s.lastRound+1, dur)
+	// s.Logf("scheduling round %d for %s from now", s.lastRound+1, dur)
 	s.nextRoundTimer = time.AfterFunc(dur, func() {
 		s.V.newRound(s)
 	})
