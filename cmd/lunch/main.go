@@ -130,6 +130,7 @@ func main() {
 							if otherNodeID == nodeID {
 								continue
 							}
+							otherNode.Delay(rand.Intn(1000))
 							otherNode.Handle(msg)
 						}
 					}

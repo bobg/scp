@@ -19,3 +19,7 @@ type newRoundCmd struct {
 type rehandleCmd struct {
 	slot *Slot
 }
+
+type delayCmd struct {
+	ms int
+}

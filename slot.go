@@ -486,7 +486,6 @@ func (s *Slot) roundTime(r int) time.Time {
 
 func (s *Slot) newRound() error {
 	if s.nextRoundTimer == nil {
-		s.Logf("newRound: abort")
 		return nil
 	}
 

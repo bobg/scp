@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/big"
 	"sync"
+	"time"
 
 	"github.com/davecgh/go-xdr/xdr"
 )
@@ -58,6 +59,7 @@ func NewNode(id NodeID, q []NodeIDSet, ch chan<- *Msg, ext map[SlotID]*ExtTopic)
 // Run processes incoming events for the node. It returns only when
 // its context is canceled and should be launched as a goroutine.
 func (n *Node) Run(ctx context.Context) {
+	var delayUntil *time.Time
 	for {
 		select {
 		case <-ctx.Done():
@@ -70,11 +72,22 @@ func (n *Node) Run(ctx context.Context) {
 				func() {
 					n.mu.Lock()
 					defer n.mu.Unlock()
+					if delayUntil != nil {
+						dur := time.Until(*delayUntil)
+						if dur > 0 {
+							time.Sleep(dur)
+						}
+						delayUntil = nil
+					}
 					err := n.handle(cmd.msg)
 					if err != nil {
 						n.Logf("ERROR %s", err)
 					}
 				}()
+
+			case *delayCmd:
+				delayUntil = new(time.Time)
+				*delayUntil = time.Now().Add(time.Duration(cmd.ms * int(time.Millisecond)))
 
 			case *deferredUpdateCmd:
 				func() {
@@ -128,6 +141,11 @@ func (n *Node) rehandle(s *Slot) {
 // same sender.)
 func (n *Node) Handle(msg *Msg) {
 	n.recv <- &msgCmd{msg: msg}
+}
+
+// Delay simulates a network delay.
+func (n *Node) Delay(ms int) {
+	n.recv <- &delayCmd{ms: ms}
 }
 
 func (n *Node) handle(msg *Msg) error {
