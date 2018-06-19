@@ -49,6 +49,7 @@ func (v valType) String() string {
 
 func main() {
 	seed := flag.Int64("seed", 1, "RNG seed")
+	delay := flag.Int("delay", 100, "random delay limit in milliseconds")
 	flag.Parse()
 	rand.Seed(*seed)
 
@@ -130,7 +131,9 @@ func main() {
 							if otherNodeID == nodeID {
 								continue
 							}
-							otherNode.Delay(rand.Intn(1000))
+							if *delay > 0 {
+								otherNode.Delay(rand.Intn(*delay))
+							}
 							otherNode.Handle(msg)
 						}
 					}
