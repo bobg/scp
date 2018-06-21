@@ -144,7 +144,7 @@ func (s *Slot) isPrepPhase() bool {
 }
 
 func (s *Slot) doNomPhase(msg *Msg) {
-	if s.maxPrioritySender(msg.V) {
+	if len(s.Z) == 0 && s.maxPrioritySender(msg.V) {
 		// "Echo" nominated values by adding them to s.X.
 		f := func(topic *NomTopic) {
 			s.X = s.X.Union(topic.X)
@@ -163,26 +163,36 @@ func (s *Slot) doNomPhase(msg *Msg) {
 	s.updateYZ()
 
 	if len(s.Z) > 0 {
-		// Some value is confirmed nominated. End NOMINATE phase and begin
-		// or continue PREPARE phase.
+		// Some value is confirmed nominated, start PREPARE phase
+		// (overlapping with NOMINATE).
+		s.Ph = PhNomPrep
+		s.B.N = 1
+		s.setBX()
+	} else if s.anyConfirmedPrepared() {
 		s.Ph = PhPrep
 		s.cancelRounds()
 		s.B.N = 1
 		s.setBX()
-	} else {
-		s.updateP()
-		if s.Ph == PhNom && !s.P.IsZero() {
-			s.Ph = PhNomPrep
-			s.B.N = 1
-			s.setBX()
-		}
 	}
 }
 
-func (s *Slot) doPrepPhase() {
-	if !s.isNomPhase() { // If isNomPhase is true, updateP was already called.
-		s.updateP()
+func (s *Slot) anyConfirmedPrepared() bool {
+	var in, out BallotSet
+	for _, msg := range s.M {
+		in = in.Union(msg.acceptsPreparedSet())
 	}
+	nodeIDs := s.findQuorum(&ballotSetPred{
+		ballots:      in,
+		finalBallots: &out,
+		testfn: func(msg *Msg, ballots BallotSet) BallotSet {
+			return ballots.Intersection(msg.acceptsPreparedSet())
+		},
+	})
+	return len(nodeIDs) > 0
+}
+
+func (s *Slot) doPrepPhase() {
+	s.updateP()
 
 	// Update s.H, the highest confirmed-prepared ballot.
 	s.H = ZeroBallot
@@ -197,7 +207,7 @@ func (s *Slot) doPrepPhase() {
 		ballots:      cpIn,
 		finalBallots: &cpOut,
 		testfn: func(msg *Msg, ballots BallotSet) BallotSet {
-			return msg.acceptsPreparedSet()
+			return ballots.Intersection(msg.acceptsPreparedSet())
 		},
 	})
 	if len(nodeIDs) > 0 {
