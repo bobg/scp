@@ -162,37 +162,25 @@ func (s *Slot) doNomPhase(msg *Msg) {
 	// confirmed-nominated values from Y to Z.
 	s.updateYZ()
 
-	if len(s.Z) > 0 {
-		// Some value is confirmed nominated, start PREPARE phase
-		// (overlapping with NOMINATE).
-		s.Ph = PhNomPrep
-		s.B.N = 1
-		s.setBX()
-	} else if s.anyConfirmedPrepared() {
-		s.Ph = PhPrep
-		s.cancelRounds()
-		s.B.N = 1
-		s.setBX()
+	if s.Ph == PhNom {
+		if len(s.Z) > 0 {
+			// Some value is confirmed nominated, start PREPARE phase.
+			s.Ph = PhNomPrep
+			s.B.N = 1
+			s.setBX()
+		} else {
+			s.updateP()
+			if !s.P.IsZero() {
+				s.Ph = PhNomPrep
+				s.B.N = 1
+				s.setBX()
+			}
+		}
 	}
-}
-
-func (s *Slot) anyConfirmedPrepared() bool {
-	var in, out BallotSet
-	for _, msg := range s.M {
-		in = in.Union(msg.acceptsPreparedSet())
-	}
-	nodeIDs := s.findQuorum(&ballotSetPred{
-		ballots:      in,
-		finalBallots: &out,
-		testfn: func(msg *Msg, ballots BallotSet) BallotSet {
-			return ballots.Intersection(msg.acceptsPreparedSet())
-		},
-	})
-	return len(nodeIDs) > 0
 }
 
 func (s *Slot) doPrepPhase() {
-	s.updateP()
+	s.updateP() // xxx may be redundant with the call in doNomPhase
 
 	// Update s.H, the highest confirmed-prepared ballot.
 	s.H = ZeroBallot
