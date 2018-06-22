@@ -17,14 +17,9 @@ A caller may instantiate Value with any concrete type that can be
 totally ordered, and for which a deterministic, commutative Combine
 operation can be written (reducing two Values to a single one).
 
-A toy demo can be found in toy.go, and can be run as:
-
-	go run toy.go 'alice: bob carol david / bob carol ed / fran gabe hank' 'bob: alice carol david / gabe hank' ...
-
-Each command-line argument is the name of a node followed by the
-node's "quorum slices" (see the discussion at the top of
-quorum.go). The demo launches a goroutine for each node. Each node
-periodically tries to suggest a new value for the next slot.
+A toy demo can be found in cmd/lunch. It takes the name of a TOML file
+as an argument. The TOML file specifies the network participants and
+topology. Sample TOML files are also in cmd/lunch.
 
 */
 package scp
