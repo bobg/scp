@@ -19,7 +19,7 @@ operation can be written (reducing two Values to a single one).
 
 A toy demo can be found in cmd/lunch. It takes the name of a TOML file
 as an argument. The TOML file specifies the network participants and
-topology. Sample TOML files are also in cmd/lunch.
+topology. Sample TOML files are in cmd/lunch/toml.
 
 */
 package scp
