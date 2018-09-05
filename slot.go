@@ -17,7 +17,7 @@ type Slot struct {
 	V    *Node
 	Ph   Phase           // PhNom -> PhNomPrep -> PhPrep -> PhCommit -> PhExt
 	M    map[NodeID]*Msg // latest message from each peer
-	sent Topic           // latest message sent
+	sent *Topic          // latest message sent
 
 	T time.Time // time at which this slot was created (for computing the nomination round)
 	X ValueSet  // votes for nominate(val)
@@ -150,11 +150,11 @@ func (s *Slot) doNomPhase(msg *Msg) {
 			s.X = s.X.Union(topic.X)
 			s.X = s.X.Union(topic.Y)
 		}
-		switch topic := msg.T.(type) {
-		case *NomTopic:
-			f(topic)
-		case *NomPrepTopic:
-			f(&topic.NomTopic)
+		switch {
+		case msg.T.NomTopic != nil:
+			f(msg.T.NomTopic)
+		case msg.T.NomPrepTopic != nil:
+			f(&msg.T.NomPrepTopic.NomTopic)
 		}
 	}
 
@@ -299,18 +299,33 @@ func (s *Slot) Msg() *Msg {
 		if len(s.X) == 0 && len(s.Y) == 0 {
 			return nil
 		}
-		msg.T = &NomTopic{
-			X: s.X,
-			Y: s.Y,
-		}
-
-	case PhNomPrep:
-		msg.T = &NomPrepTopic{
-			NomTopic: NomTopic{
+		msg.T = &Topic{
+			NomTopic: &NomTopic{
 				X: s.X,
 				Y: s.Y,
 			},
-			PrepTopic: PrepTopic{
+		}
+
+	case PhNomPrep:
+		msg.T = &Topic{
+			NomPrepTopic: &NomPrepTopic{
+				NomTopic: NomTopic{
+					X: s.X,
+					Y: s.Y,
+				},
+				PrepTopic: PrepTopic{
+					B:  s.B,
+					P:  s.P,
+					PP: s.PP,
+					HN: s.H.N,
+					CN: s.C.N,
+				},
+			},
+		}
+
+	case PhPrep:
+		msg.T = &Topic{
+			PrepTopic: &PrepTopic{
 				B:  s.B,
 				P:  s.P,
 				PP: s.PP,
@@ -319,27 +334,22 @@ func (s *Slot) Msg() *Msg {
 			},
 		}
 
-	case PhPrep:
-		msg.T = &PrepTopic{
-			B:  s.B,
-			P:  s.P,
-			PP: s.PP,
-			HN: s.H.N,
-			CN: s.C.N,
-		}
-
 	case PhCommit:
-		msg.T = &CommitTopic{
-			B:  s.B,
-			PN: s.P.N,
-			HN: s.H.N,
-			CN: s.C.N,
+		msg.T = &Topic{
+			CommitTopic: &CommitTopic{
+				B:  s.B,
+				PN: s.P.N,
+				HN: s.H.N,
+				CN: s.C.N,
+			},
 		}
 
 	case PhExt:
-		msg.T = &ExtTopic{
-			C:  s.C,
-			HN: s.H.N,
+		msg.T = &Topic{
+			ExtTopic: &ExtTopic{
+				C:  s.C,
+				HN: s.H.N,
+			},
 		}
 	}
 	return msg

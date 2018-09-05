@@ -9,48 +9,48 @@ import (
 
 func TestAcceptsNominated(t *testing.T) {
 	cases := []struct {
-		m             Topic
+		m             *Topic
 		wantA, wantVA []int
 	}{
 		{
-			m: &NomTopic{},
+			m: &Topic{NomTopic: &NomTopic{}},
 		},
 		{
-			m:      &NomTopic{X: ValueSet{valtype(1)}},
+			m:      &Topic{NomTopic: &NomTopic{X: ValueSet{valtype(1)}}},
 			wantVA: []int{1},
 		},
 		{
-			m:      &NomTopic{Y: ValueSet{valtype(1)}},
+			m:      &Topic{NomTopic: &NomTopic{Y: ValueSet{valtype(1)}}},
 			wantA:  []int{1},
 			wantVA: []int{1},
 		},
 		{
-			m:      &NomTopic{X: ValueSet{valtype(1)}, Y: ValueSet{valtype(2)}},
+			m:      &Topic{NomTopic: &NomTopic{X: ValueSet{valtype(1)}, Y: ValueSet{valtype(2)}}},
 			wantA:  []int{2},
 			wantVA: []int{1, 2},
 		},
 		{
-			m:      &PrepTopic{B: Ballot{1, valtype(1)}},
+			m:      &Topic{PrepTopic: &PrepTopic{B: Ballot{1, valtype(1)}}},
 			wantA:  []int{1},
 			wantVA: []int{1},
 		},
 		{
-			m:      &PrepTopic{B: Ballot{1, valtype(1)}, P: Ballot{1, valtype(2)}},
+			m:      &Topic{PrepTopic: &PrepTopic{B: Ballot{1, valtype(1)}, P: Ballot{1, valtype(2)}}},
 			wantA:  []int{1, 2},
 			wantVA: []int{1, 2},
 		},
 		{
-			m:      &PrepTopic{B: Ballot{1, valtype(1)}, P: Ballot{1, valtype(2)}, PP: Ballot{1, valtype(3)}},
+			m:      &Topic{PrepTopic: &PrepTopic{B: Ballot{1, valtype(1)}, P: Ballot{1, valtype(2)}, PP: Ballot{1, valtype(3)}}},
 			wantA:  []int{1, 2, 3},
 			wantVA: []int{1, 2, 3},
 		},
 		{
-			m:      &CommitTopic{B: Ballot{1, valtype(1)}},
+			m:      &Topic{CommitTopic: &CommitTopic{B: Ballot{1, valtype(1)}}},
 			wantA:  []int{1},
 			wantVA: []int{1},
 		},
 		{
-			m:      &ExtTopic{C: Ballot{1, valtype(1)}},
+			m:      &Topic{ExtTopic: &ExtTopic{C: Ballot{1, valtype(1)}}},
 			wantA:  []int{1},
 			wantVA: []int{1},
 		},
@@ -80,49 +80,49 @@ func TestAcceptsNominated(t *testing.T) {
 
 func TestAcceptsPrepared(t *testing.T) {
 	cases := []struct {
-		m             Topic
+		m             *Topic
 		wantA, wantVA BallotSet
 	}{
 		{
-			m: &NomTopic{},
+			m: &Topic{NomTopic: &NomTopic{}},
 		},
 		{
-			m: &NomTopic{X: ValueSet{valtype(1)}},
+			m: &Topic{NomTopic: &NomTopic{X: ValueSet{valtype(1)}}},
 		},
 		{
-			m: &NomTopic{Y: ValueSet{valtype(1)}},
+			m: &Topic{NomTopic: &NomTopic{Y: ValueSet{valtype(1)}}},
 		},
 		{
-			m:      &PrepTopic{B: Ballot{5, valtype(1)}},
+			m:      &Topic{PrepTopic: &PrepTopic{B: Ballot{5, valtype(1)}}},
 			wantVA: BallotSet{Ballot{5, valtype(1)}},
 		},
 		{
-			m:      &PrepTopic{B: Ballot{5, valtype(1)}, P: Ballot{5, valtype(2)}},
+			m:      &Topic{PrepTopic: &PrepTopic{B: Ballot{5, valtype(1)}, P: Ballot{5, valtype(2)}}},
 			wantA:  BallotSet{Ballot{5, valtype(2)}},
 			wantVA: BallotSet{Ballot{5, valtype(1)}, Ballot{5, valtype(2)}},
 		},
 		{
-			m:      &PrepTopic{B: Ballot{5, valtype(1)}, P: Ballot{5, valtype(2)}, PP: Ballot{5, valtype(3)}},
+			m:      &Topic{PrepTopic: &PrepTopic{B: Ballot{5, valtype(1)}, P: Ballot{5, valtype(2)}, PP: Ballot{5, valtype(3)}}},
 			wantA:  BallotSet{Ballot{5, valtype(2)}, Ballot{5, valtype(3)}},
 			wantVA: BallotSet{Ballot{5, valtype(1)}, Ballot{5, valtype(2)}, Ballot{5, valtype(3)}},
 		},
 		{
-			m:      &PrepTopic{B: Ballot{5, valtype(1)}, P: Ballot{5, valtype(2)}, PP: Ballot{5, valtype(3)}, HN: 20},
+			m:      &Topic{PrepTopic: &PrepTopic{B: Ballot{5, valtype(1)}, P: Ballot{5, valtype(2)}, PP: Ballot{5, valtype(3)}, HN: 20}},
 			wantA:  BallotSet{Ballot{5, valtype(2)}, Ballot{5, valtype(3)}, Ballot{20, valtype(1)}},
 			wantVA: BallotSet{Ballot{5, valtype(1)}, Ballot{5, valtype(2)}, Ballot{5, valtype(3)}, Ballot{20, valtype(1)}},
 		},
 		{
-			m:      &PrepTopic{B: Ballot{5, valtype(1)}, P: Ballot{5, valtype(2)}, PP: Ballot{5, valtype(3)}, CN: 10, HN: 20},
+			m:      &Topic{PrepTopic: &PrepTopic{B: Ballot{5, valtype(1)}, P: Ballot{5, valtype(2)}, PP: Ballot{5, valtype(3)}, CN: 10, HN: 20}},
 			wantA:  BallotSet{Ballot{5, valtype(2)}, Ballot{5, valtype(3)}, Ballot{20, valtype(1)}},
 			wantVA: BallotSet{Ballot{5, valtype(1)}, Ballot{5, valtype(2)}, Ballot{5, valtype(3)}, Ballot{20, valtype(1)}},
 		},
 		{
-			m:      &CommitTopic{B: Ballot{20, valtype(1)}, CN: 10, HN: 30, PN: 15},
+			m:      &Topic{CommitTopic: &CommitTopic{B: Ballot{20, valtype(1)}, CN: 10, HN: 30, PN: 15}},
 			wantA:  BallotSet{Ballot{15, valtype(1)}, Ballot{30, valtype(1)}},
 			wantVA: BallotSet{Ballot{15, valtype(1)}, Ballot{30, valtype(1)}, Ballot{math.MaxInt32, valtype(1)}},
 		},
 		{
-			m:      &ExtTopic{C: Ballot{1, valtype(1)}},
+			m:      &Topic{ExtTopic: &ExtTopic{C: Ballot{1, valtype(1)}}},
 			wantA:  BallotSet{Ballot{math.MaxInt32, valtype(1)}},
 			wantVA: BallotSet{Ballot{math.MaxInt32, valtype(1)}},
 		},
@@ -149,138 +149,138 @@ func TestAcceptsCommit(t *testing.T) {
 	}
 
 	cases := []struct {
-		m        Topic
+		m        *Topic
 		min, max int
 		a, va    want
 	}{
 		{
-			m:   &NomTopic{},
+			m:   &Topic{NomTopic: &NomTopic{}},
 			min: 1,
 			max: 10,
 			a:   want{ok: false},
 			va:  want{ok: false},
 		},
 		{
-			m:   &NomTopic{X: ValueSet{valtype(1)}},
+			m:   &Topic{NomTopic: &NomTopic{X: ValueSet{valtype(1)}}},
 			min: 1,
 			max: 10,
 			a:   want{ok: false},
 			va:  want{ok: false},
 		},
 		{
-			m:   &NomTopic{Y: ValueSet{valtype(1)}},
+			m:   &Topic{NomTopic: &NomTopic{Y: ValueSet{valtype(1)}}},
 			min: 1,
 			max: 10,
 			a:   want{ok: false},
 			va:  want{ok: false},
 		},
 		{
-			m:   &PrepTopic{B: Ballot{1, valtype(1)}},
+			m:   &Topic{PrepTopic: &PrepTopic{B: Ballot{1, valtype(1)}}},
 			min: 1,
 			max: 10,
 			a:   want{ok: false},
 			va:  want{ok: false},
 		},
 		{
-			m:   &PrepTopic{B: Ballot{1, valtype(1)}, CN: 3, HN: 7},
+			m:   &Topic{PrepTopic: &PrepTopic{B: Ballot{1, valtype(1)}, CN: 3, HN: 7}},
 			min: 1,
 			max: 10,
 			a:   want{ok: false},
 			va:  want{ok: true, min: 3, max: 7},
 		},
 		{
-			m:   &PrepTopic{B: Ballot{1, valtype(1)}, CN: 3, HN: 7},
+			m:   &Topic{PrepTopic: &PrepTopic{B: Ballot{1, valtype(1)}, CN: 3, HN: 7}},
 			min: 5,
 			max: 10,
 			a:   want{ok: false},
 			va:  want{ok: true, min: 5, max: 7},
 		},
 		{
-			m:   &PrepTopic{B: Ballot{1, valtype(1)}, CN: 7, HN: 20},
+			m:   &Topic{PrepTopic: &PrepTopic{B: Ballot{1, valtype(1)}, CN: 7, HN: 20}},
 			min: 5,
 			max: 10,
 			a:   want{ok: false},
 			va:  want{ok: true, min: 7, max: 10},
 		},
 		{
-			m:   &PrepTopic{B: Ballot{1, valtype(2)}, CN: 3, HN: 7},
+			m:   &Topic{PrepTopic: &PrepTopic{B: Ballot{1, valtype(2)}, CN: 3, HN: 7}},
 			min: 1,
 			max: 10,
 			a:   want{ok: false},
 			va:  want{ok: false},
 		},
 		{
-			m:   &PrepTopic{B: Ballot{1, valtype(2)}, CN: 3, HN: 7},
+			m:   &Topic{PrepTopic: &PrepTopic{B: Ballot{1, valtype(2)}, CN: 3, HN: 7}},
 			min: 5,
 			max: 10,
 			a:   want{ok: false},
 			va:  want{ok: false},
 		},
 		{
-			m:   &PrepTopic{B: Ballot{1, valtype(2)}, CN: 7, HN: 20},
+			m:   &Topic{PrepTopic: &PrepTopic{B: Ballot{1, valtype(2)}, CN: 7, HN: 20}},
 			min: 5,
 			max: 10,
 			a:   want{ok: false},
 			va:  want{ok: false},
 		},
 		{
-			m:   &CommitTopic{B: Ballot{1, valtype(1)}, CN: 15, HN: 20},
+			m:   &Topic{CommitTopic: &CommitTopic{B: Ballot{1, valtype(1)}, CN: 15, HN: 20}},
 			min: 1,
 			max: 10,
 			a:   want{ok: false},
 			va:  want{ok: false},
 		},
 		{
-			m:   &CommitTopic{B: Ballot{1, valtype(1)}, CN: 1, HN: 4},
+			m:   &Topic{CommitTopic: &CommitTopic{B: Ballot{1, valtype(1)}, CN: 1, HN: 4}},
 			min: 5,
 			max: 10,
 			a:   want{ok: false},
 			va:  want{ok: true, min: 5, max: 10},
 		},
 		{
-			m:   &CommitTopic{B: Ballot{1, valtype(1)}, CN: 1, HN: 7},
+			m:   &Topic{CommitTopic: &CommitTopic{B: Ballot{1, valtype(1)}, CN: 1, HN: 7}},
 			min: 5,
 			max: 10,
 			a:   want{ok: true, min: 5, max: 7},
 			va:  want{ok: true, min: 5, max: 7},
 		},
 		{
-			m:   &CommitTopic{B: Ballot{1, valtype(1)}, CN: 4, HN: 12},
+			m:   &Topic{CommitTopic: &CommitTopic{B: Ballot{1, valtype(1)}, CN: 4, HN: 12}},
 			min: 5,
 			max: 10,
 			a:   want{ok: true, min: 5, max: 10},
 			va:  want{ok: true, min: 5, max: 10},
 		},
 		{
-			m:   &CommitTopic{B: Ballot{1, valtype(1)}, CN: 7, HN: 12},
+			m:   &Topic{CommitTopic: &CommitTopic{B: Ballot{1, valtype(1)}, CN: 7, HN: 12}},
 			min: 5,
 			max: 10,
 			a:   want{ok: true, min: 7, max: 10},
 			va:  want{ok: true, min: 7, max: 10},
 		},
 		{
-			m:   &ExtTopic{C: Ballot{5, valtype(1)}},
+			m:   &Topic{ExtTopic: &ExtTopic{C: Ballot{5, valtype(1)}}},
 			min: 1,
 			max: 10,
 			a:   want{ok: true, min: 5, max: 10},
 			va:  want{ok: true, min: 5, max: 10},
 		},
 		{
-			m:   &ExtTopic{C: Ballot{5, valtype(1)}},
+			m:   &Topic{ExtTopic: &ExtTopic{C: Ballot{5, valtype(1)}}},
 			min: 1,
 			max: 4,
 			a:   want{ok: false},
 			va:  want{ok: false},
 		},
 		{
-			m:   &ExtTopic{C: Ballot{5, valtype(1)}},
+			m:   &Topic{ExtTopic: &ExtTopic{C: Ballot{5, valtype(1)}}},
 			min: 6,
 			max: 10,
 			a:   want{ok: true, min: 6, max: 10},
 			va:  want{ok: true, min: 6, max: 10},
 		},
 		{
-			m:   &ExtTopic{C: Ballot{5, valtype(1)}},
+			m:   &Topic{ExtTopic: &ExtTopic{C: Ballot{5, valtype(1)}}},
 			min: 3,
 			max: 7,
 			a:   want{ok: true, min: 5, max: 7},

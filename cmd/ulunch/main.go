@@ -1,7 +1,7 @@
 package main
 
 // Usage:
-//   lunch [-seed N] CONFIGFILE
+//   ulunch [-seed N] CONFIGFILE
 
 import (
 	"bytes"

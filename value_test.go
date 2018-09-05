@@ -2,6 +2,7 @@ package scp
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -9,6 +10,9 @@ import (
 )
 
 type valtype uint32
+
+func (v valtype) MarshalJSON() ([]byte, error)  { return json.Marshal(uint32(v)) }
+func (v *valtype) UnmarshalJSON(b []byte) error { return json.Unmarshal(b, (*uint32)(v)) }
 
 func (v valtype) IsNil() bool { return false }
 

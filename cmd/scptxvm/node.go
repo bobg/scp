@@ -30,7 +30,7 @@ func handleNodeOutput(ctx context.Context) {
 			return
 
 		case latest = <-msgChan:
-			if ext, ok := latest.T.(*scp.ExtTopic); ok {
+			if ext := latest.T.ExtTopic; ext != nil {
 				// We've externalized a block at a new height.
 
 				// Update the tx pool to remove published and conflicting txs.

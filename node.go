@@ -153,7 +153,7 @@ func (n *Node) handle(msg *Msg) error {
 		// This node has already externalized a value for the given slot.
 		// Send an EXTERNALIZE message outbound, unless the inbound
 		// message is also EXTERNALIZE.
-		if inTopic, ok := msg.T.(*ExtTopic); ok {
+		if inTopic := msg.T.ExtTopic; inTopic != nil {
 			// Double check that the inbound EXTERNALIZE value agrees with
 			// this node.
 			if !ValueEqual(inTopic.C.X, topic.C.X) {
@@ -161,7 +161,7 @@ func (n *Node) handle(msg *Msg) error {
 				panic("consensus failure")
 			}
 		} else {
-			n.send <- NewMsg(n.ID, msg.I, n.Q, topic)
+			n.send <- NewMsg(n.ID, msg.I, n.Q, &Topic{ExtTopic: topic})
 		}
 		return nil
 	}
@@ -186,7 +186,7 @@ func (n *Node) handle(msg *Msg) error {
 		return nil
 	}
 
-	if extTopic, ok := outbound.T.(*ExtTopic); ok {
+	if extTopic := outbound.T.ExtTopic; extTopic != nil {
 		// Handling the inbound message resulted in externalizing a value.
 		// We can now save the EXTERNALIZE message and get rid of the Slot
 		// object.
@@ -371,7 +371,7 @@ func (n *Node) MsgsSince(since SlotID) []*Msg {
 			V: n.ID,
 			I: slotID,
 			Q: n.Q,
-			T: topic,
+			T: &Topic{ExtTopic: topic},
 		}
 		result = append(result, msg)
 	}

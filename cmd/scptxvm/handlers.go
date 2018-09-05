@@ -45,14 +45,7 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 
 	nh := atomic.LoadInt32(&nomHeight)
 	if int32(msg.I) >= nh {
-		var bump bool
-		switch msg.T.(type) {
-		case *scp.CommitTopic:
-			bump = true
-		case *scp.ExtTopic:
-			bump = true
-		}
-		if bump {
+		if msg.T.CommitTopic != nil || msg.T.ExtTopic != nil {
 			// Can no longer nominate for slot nomHeight.
 			atomic.StoreInt32(&nomHeight, int32(msg.I+1))
 			nomChan <- msg.I + 1
@@ -69,21 +62,21 @@ func protocolHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Collect all block IDs mentioned in the new message.
 	var blockIDs scp.ValueSet
-	switch topic := msg.T.(type) {
-	case *scp.NomTopic:
-		blockIDs = blockIDs.Union(topic.X)
-		blockIDs = blockIDs.Union(topic.Y)
+	switch {
+	case msg.T.NomTopic != nil:
+		blockIDs = blockIDs.Union(msg.T.NomTopic.X)
+		blockIDs = blockIDs.Union(msg.T.NomTopic.Y)
 
-	case *scp.PrepTopic:
-		blockIDs = blockIDs.Add(topic.B.X)
-		blockIDs = maybeAdd(blockIDs, topic.P.X)
-		blockIDs = maybeAdd(blockIDs, topic.PP.X)
+	case msg.T.PrepTopic != nil:
+		blockIDs = blockIDs.Add(msg.T.PrepTopic.B.X)
+		blockIDs = maybeAdd(blockIDs, msg.T.PrepTopic.P.X)
+		blockIDs = maybeAdd(blockIDs, msg.T.PrepTopic.PP.X)
 
-	case *scp.CommitTopic:
-		blockIDs = maybeAdd(blockIDs, topic.B.X)
+	case msg.T.CommitTopic != nil:
+		blockIDs = maybeAdd(blockIDs, msg.T.CommitTopic.B.X)
 
-	case *scp.ExtTopic:
-		blockIDs = maybeAdd(blockIDs, topic.C.X)
+	case msg.T.ExtTopic != nil:
+		blockIDs = maybeAdd(blockIDs, msg.T.ExtTopic.C.X)
 	}
 
 	// Request the contents of any unknown blocks.
@@ -179,7 +172,7 @@ func blocksHandler(w http.ResponseWriter, r *http.Request) {
 	for _, blockID := range req.BlockIDs {
 		block, err := getBlock(req.Height, blockID)
 		if err != nil {
-			httperr(w, http.StatusNotFound, "could not resolve requested block %s (height %d): %s", blockID, req.Height, err)
+			httperr(w, http.StatusNotFound, "could not resolve requested block %s (height %d): %s", blockID.String(), req.Height, err)
 			return
 		}
 		result = append(result, block)

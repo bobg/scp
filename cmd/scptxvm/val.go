@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"sort"
 
 	"github.com/bobg/scp"
@@ -13,6 +14,14 @@ import (
 // IDs. When a node needs to know the contents of a block, it can
 // inquire via RPC.
 type valtype bc.Hash
+
+func (v valtype) MarshalJSON() ([]byte, error) {
+	return json.Marshal(bc.Hash(v))
+}
+
+func (v *valtype) UnmarshalJSON(b []byte) error {
+	return json.Unmarshal(b, (*bc.Hash)(v))
+}
 
 func (v valtype) Less(otherval scp.Value) bool {
 	other := otherval.(valtype)

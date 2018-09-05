@@ -44,6 +44,7 @@ var (
 func main() {
 	bgctx = context.Background()
 	bgctx, bgcancel = context.WithCancel(bgctx)
+	defer bgcancel()
 
 	var (
 		confFile         string

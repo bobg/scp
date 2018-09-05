@@ -1,12 +1,15 @@
 package scp
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
 
 // Value is the abstract type of values being voted on by the network.
 type Value interface {
+	json.Marshaler
+
 	// Less tells whether this value is less than another. Values must be totally ordered.
 	Less(Value) bool
 

@@ -13,13 +13,13 @@ type Msg struct {
 	V NodeID      // ID of the node sending this message.
 	I SlotID      // ID of the slot that this message is about.
 	Q []NodeIDSet // Quorum slices of the sending node.
-	T Topic       // The payload: a *NomTopic, a *NomPrepTopic, *PrepTopic, *CommitTopic, or *ExtTopic.
+	T *Topic      // The payload: a *NomTopic, a *NomPrepTopic, *PrepTopic, *CommitTopic, or *ExtTopic.
 }
 
 var msgCounter int32
 
 // NewMsg produces a new message.
-func NewMsg(v NodeID, i SlotID, q []NodeIDSet, t Topic) *Msg {
+func NewMsg(v NodeID, i SlotID, q []NodeIDSet, t *Topic) *Msg {
 	c := atomic.AddInt32(&msgCounter, 1)
 	return &Msg{
 		C: c,
@@ -61,25 +61,25 @@ func (e *Msg) valid() (err error) {
 		return nil
 	}
 
-	switch topic := e.T.(type) {
-	case *NomTopic:
-		err := nom(topic)
+	switch {
+	case e.T.NomTopic != nil:
+		err := nom(e.T.NomTopic)
 		if err != nil {
 			return err
 		}
 
-	case *NomPrepTopic:
-		err := nom(&topic.NomTopic)
+	case e.T.NomPrepTopic != nil:
+		err := nom(&e.T.NomPrepTopic.NomTopic)
 		if err != nil {
 			return err
 		}
-		return prep(&topic.PrepTopic)
+		return prep(&e.T.NomPrepTopic.PrepTopic)
 
-	case *PrepTopic:
-		return prep(topic)
+	case e.T.PrepTopic != nil:
+		return prep(e.T.PrepTopic)
 
-	case *CommitTopic:
-		if topic.CN > topic.HN {
+	case e.T.CommitTopic != nil:
+		if e.T.CommitTopic.CN > e.T.CommitTopic.HN {
 			return errors.New("CN > HN (commit)")
 		}
 	}
@@ -88,17 +88,17 @@ func (e *Msg) valid() (err error) {
 
 // Return the ballot counter (if any).
 func (e *Msg) bN() int {
-	switch topic := e.T.(type) {
-	case *NomPrepTopic:
-		return topic.B.N
+	switch {
+	case e.T.NomPrepTopic != nil:
+		return e.T.NomPrepTopic.B.N
 
-	case *PrepTopic:
-		return topic.B.N
+	case e.T.PrepTopic != nil:
+		return e.T.PrepTopic.B.N
 
-	case *CommitTopic:
-		return topic.B.N
+	case e.T.CommitTopic != nil:
+		return e.T.CommitTopic.B.N
 
-	case *ExtTopic:
+	case e.T.ExtTopic != nil:
 		return math.MaxInt32
 	}
 	return 0
@@ -110,23 +110,23 @@ func (e *Msg) votesOrAcceptsNominatedSet() ValueSet {
 	f := func(topic *NomTopic) {
 		result = result.Union(topic.X)
 	}
-	switch topic := e.T.(type) {
-	case *NomTopic:
-		f(topic)
-	case *NomPrepTopic:
-		f(&topic.NomTopic)
+	switch {
+	case e.T.NomTopic != nil:
+		f(e.T.NomTopic)
+	case e.T.NomPrepTopic != nil:
+		f(&e.T.NomPrepTopic.NomTopic)
 	}
 	return result
 }
 
 // Returns the set of values that e accepts as nominated.
 func (e *Msg) acceptsNominatedSet() ValueSet {
-	switch topic := e.T.(type) {
-	case *NomTopic:
-		return topic.Y
+	switch {
+	case e.T.NomTopic != nil:
+		return e.T.NomTopic.Y
 
-	case *NomPrepTopic:
-		return topic.Y
+	case e.T.NomPrepTopic != nil:
+		return e.T.NomPrepTopic.Y
 	}
 	return nil // not reached
 }
@@ -138,15 +138,15 @@ func (e *Msg) votesOrAcceptsPreparedSet() BallotSet {
 		result = result.Add(topic.B)
 	}
 
-	switch topic := e.T.(type) {
-	case *NomPrepTopic:
-		f(&topic.PrepTopic)
+	switch {
+	case e.T.NomPrepTopic != nil:
+		f(&e.T.NomPrepTopic.PrepTopic)
 
-	case *PrepTopic:
-		f(topic)
+	case e.T.PrepTopic != nil:
+		f(e.T.PrepTopic)
 
-	case *CommitTopic:
-		result = result.Add(Ballot{N: math.MaxInt32, X: topic.B.X})
+	case e.T.CommitTopic != nil:
+		result = result.Add(Ballot{N: math.MaxInt32, X: e.T.CommitTopic.B.X})
 	}
 	return result
 }
@@ -165,19 +165,19 @@ func (e *Msg) acceptsPreparedSet() BallotSet {
 			result = result.Add(Ballot{N: topic.HN, X: topic.B.X})
 		}
 	}
-	switch topic := e.T.(type) {
-	case *NomPrepTopic:
-		f(&topic.PrepTopic)
+	switch {
+	case e.T.NomPrepTopic != nil:
+		f(&e.T.NomPrepTopic.PrepTopic)
 
-	case *PrepTopic:
-		f(topic)
+	case e.T.PrepTopic != nil:
+		f(e.T.PrepTopic)
 
-	case *CommitTopic:
-		result = result.Add(Ballot{N: topic.PN, X: topic.B.X})
-		result = result.Add(Ballot{N: topic.HN, X: topic.B.X})
+	case e.T.CommitTopic != nil:
+		result = result.Add(Ballot{N: e.T.CommitTopic.PN, X: e.T.CommitTopic.B.X})
+		result = result.Add(Ballot{N: e.T.CommitTopic.HN, X: e.T.CommitTopic.B.X})
 
-	case *ExtTopic:
-		result = result.Add(Ballot{N: math.MaxInt32, X: topic.C.X})
+	case e.T.ExtTopic != nil:
+		result = result.Add(Ballot{N: math.MaxInt32, X: e.T.ExtTopic.C.X})
 	}
 	return result
 }
@@ -207,22 +207,22 @@ func (e *Msg) votesOrAcceptsCommit(v Value, min, max int) (bool, int, int) {
 		}
 		return true, min, max
 	}
-	switch topic := e.T.(type) {
-	case *NomPrepTopic:
-		return f(&topic.PrepTopic)
+	switch {
+	case e.T.NomPrepTopic != nil:
+		return f(&e.T.NomPrepTopic.PrepTopic)
 
-	case *PrepTopic:
-		return f(topic)
+	case e.T.PrepTopic != nil:
+		return f(e.T.PrepTopic)
 
-	case *CommitTopic:
-		if !ValueEqual(topic.B.X, v) {
+	case e.T.CommitTopic != nil:
+		if !ValueEqual(e.T.CommitTopic.B.X, v) {
 			return false, 0, 0
 		}
-		if topic.CN > max {
+		if e.T.CommitTopic.CN > max {
 			return false, 0, 0
 		}
-		if topic.CN > min {
-			min = topic.CN
+		if e.T.CommitTopic.CN > min {
+			min = e.T.CommitTopic.CN
 		}
 		return true, min, max
 	}
@@ -234,34 +234,34 @@ func (e *Msg) votesOrAcceptsCommit(v Value, min, max int) (bool, int, int) {
 // returns the new min/max that is the overlap between the input and
 // what e accepts.
 func (e *Msg) acceptsCommit(v Value, min, max int) (bool, int, int) {
-	switch topic := e.T.(type) {
-	case *CommitTopic:
-		if !ValueEqual(topic.B.X, v) {
+	switch {
+	case e.T.CommitTopic != nil:
+		if !ValueEqual(e.T.CommitTopic.B.X, v) {
 			return false, 0, 0
 		}
-		if topic.CN > max {
+		if e.T.CommitTopic.CN > max {
 			return false, 0, 0
 		}
-		if topic.HN < min {
+		if e.T.CommitTopic.HN < min {
 			return false, 0, 0
 		}
-		if topic.CN > min {
-			min = topic.CN
+		if e.T.CommitTopic.CN > min {
+			min = e.T.CommitTopic.CN
 		}
-		if topic.HN < max {
-			max = topic.HN
+		if e.T.CommitTopic.HN < max {
+			max = e.T.CommitTopic.HN
 		}
 		return true, min, max
 
-	case *ExtTopic:
-		if !ValueEqual(topic.C.X, v) {
+	case e.T.ExtTopic != nil:
+		if !ValueEqual(e.T.ExtTopic.C.X, v) {
 			return false, 0, 0
 		}
-		if topic.C.N > max {
+		if e.T.ExtTopic.C.N > max {
 			return false, 0, 0
 		}
-		if topic.C.N > min {
-			min = topic.C.N
+		if e.T.ExtTopic.C.N > min {
+			min = e.T.ExtTopic.C.N
 		}
 		return true, min, max
 	}

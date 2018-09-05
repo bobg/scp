@@ -69,7 +69,7 @@ func nominate(ctx context.Context) {
 			X: scp.ValueSet{valtype(block.Hash())},
 		}
 		node.Logf("nominating block %x (%d tx(s)) at height %d", block.Hash().Bytes(), len(block.Transactions), block.Height)
-		msg := scp.NewMsg(node.ID, scp.SlotID(block.Height), node.Q, n) // xxx slotID is 32 bits, block height is 64
+		msg := scp.NewMsg(node.ID, scp.SlotID(block.Height), node.Q, &scp.Topic{NomTopic: n}) // xxx slotID is 32 bits, block height is 64
 		node.Handle(msg)
 		return nil
 	}

@@ -1,0 +1,4 @@
+[nodes]
+alice = [["bob", "carol"]]
+bob = [["alice", "carol"]]
+carol = [["alice", "bob"]]
