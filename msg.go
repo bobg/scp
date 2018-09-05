@@ -128,7 +128,7 @@ func (e *Msg) acceptsNominatedSet() ValueSet {
 	case *NomPrepTopic:
 		return topic.Y
 	}
-	return nil // not reached
+	return nil
 }
 
 // Returns the set of ballots for which e votes or accepts "prepared."

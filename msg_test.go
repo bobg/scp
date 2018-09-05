@@ -30,29 +30,37 @@ func TestAcceptsNominated(t *testing.T) {
 			wantVA: []int{1, 2},
 		},
 		{
-			m:      &PrepTopic{B: Ballot{1, valtype(1)}},
-			wantA:  []int{1},
-			wantVA: []int{1},
-		},
-		{
-			m:      &PrepTopic{B: Ballot{1, valtype(1)}, P: Ballot{1, valtype(2)}},
-			wantA:  []int{1, 2},
+			m: &NomPrepTopic{
+				NomTopic:  NomTopic{X: ValueSet{valtype(1)}, Y: ValueSet{valtype(2)}},
+				PrepTopic: PrepTopic{B: Ballot{1, valtype(1)}},
+			},
+			wantA:  []int{2},
 			wantVA: []int{1, 2},
 		},
 		{
+			m:      &PrepTopic{B: Ballot{1, valtype(1)}},
+			wantA:  []int{},
+			wantVA: []int{},
+		},
+		{
+			m:      &PrepTopic{B: Ballot{1, valtype(1)}, P: Ballot{1, valtype(2)}},
+			wantA:  []int{},
+			wantVA: []int{},
+		},
+		{
 			m:      &PrepTopic{B: Ballot{1, valtype(1)}, P: Ballot{1, valtype(2)}, PP: Ballot{1, valtype(3)}},
-			wantA:  []int{1, 2, 3},
-			wantVA: []int{1, 2, 3},
+			wantA:  []int{},
+			wantVA: []int{},
 		},
 		{
 			m:      &CommitTopic{B: Ballot{1, valtype(1)}},
-			wantA:  []int{1},
-			wantVA: []int{1},
+			wantA:  []int{},
+			wantVA: []int{},
 		},
 		{
 			m:      &ExtTopic{C: Ballot{1, valtype(1)}},
-			wantA:  []int{1},
-			wantVA: []int{1},
+			wantA:  []int{},
+			wantVA: []int{},
 		},
 	}
 	for i, tc := range cases {
