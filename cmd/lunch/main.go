@@ -70,7 +70,7 @@ func main() {
 	}
 
 	nodes := make(map[scp.NodeID]*scp.Node)
-	ch := make(chan *scp.Msg, 10000)
+	ch := make(chan *scp.Msg)
 	for nodeID, qstrs := range conf.Nodes {
 		q := make([]scp.NodeIDSet, 0, len(qstrs))
 		for _, slice := range qstrs {
