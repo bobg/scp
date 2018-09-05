@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"expvar"
 	"fmt"
 	"log"
 	"math/big"
@@ -148,6 +149,11 @@ func (n *Node) Delay(ms int) {
 	n.recv <- &delayCmd{ms: ms}
 }
 
+var (
+	NodeHandleCalls = expvar.NewInt("node_handle_calls")
+	NodeHandleTime  = expvar.NewInt("node_handle_time")
+)
+
 func (n *Node) handle(msg *Msg) error {
 	if topic, ok := n.ext[msg.I]; ok {
 		// This node has already externalized a value for the given slot.
@@ -165,6 +171,13 @@ func (n *Node) handle(msg *Msg) error {
 		}
 		return nil
 	}
+
+	NodeHandleCalls.Add(1)
+	startTime := time.Now()
+	defer func() {
+		elapsed := time.Since(startTime)
+		NodeHandleTime.Add(int64(elapsed))
+	}()
 
 	s, ok := n.pending[msg.I]
 	if !ok {
