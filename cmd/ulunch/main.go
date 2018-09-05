@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"sync"
 
 	"github.com/BurntSushi/toml"
 	"github.com/bobg/scp"
@@ -57,16 +58,52 @@ func (v valType) String() string {
 }
 
 func main() {
-	seed := flag.Int64("seed", 1, "RNG seed")
-	delay := flag.Int("delay", 100, "random delay limit in milliseconds")
+	var conf struct {
+		ID string
+		Q  [][]string
+	}
+	_, err := toml.Decode(string(confButs), &conf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var q []scp.NodeIDSet
+	for _, slice := range conf.Q {
+		var s scp.NodeIDSet
+		for _, id := range slice {
+			s = s.Add(scp.NodeID(id))
+		}
+		q = append(q, s)
+	}
+	msgChan := make(chan *scp.Msg)
+	node := scp.NewNode(scp.NodeID(conf.ID), conf.Q, msgChan, nil)
+
+	var cancel context.CancelFunc
+	ctx := context.Background()
+	ctx, cancel = context.WithCancel(ctx)
+
+	var wg sync.WaitGroup
+	go runNode(ctx, wg, node)
+	go handleNodeOutput(ctx, wg, msgChan)
+	go nominate(ctx, wg, node)
+	go udpListener(ctx, wg, node)
+	wg.Add(4)
+
+	wg.Wait()
+}
+
+func main() {
+	var (
+		seed  = flag.Int64("seed", 1, "RNG seed")
+		delay = flag.Int("delay", 100, "random delay limit in milliseconds")
+	)
 	flag.Parse()
+
 	rand.Seed(*seed)
 
 	if flag.NArg() < 1 {
-		log.Fatal("usage: lunch [-seed N] CONFFILE")
+		log.Fatal("usage: ulunch [-seed N] CONFFILE")
 	}
-	confFile := flag.Arg(0)
-	confBits, err := ioutil.ReadFile(confFile)
+	confBits, err := ioutil.ReadFile(flag.Arg(0))
 	if err != nil {
 		log.Fatal(err)
 	}
