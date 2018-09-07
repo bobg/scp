@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/bobg/scp"
@@ -85,6 +86,8 @@ func main() {
 		go node.Run(context.Background())
 	}
 
+	lastCalls := int64(0)
+
 	for slotID := scp.SlotID(1); ; slotID++ {
 		msgs := make(map[scp.NodeID]*scp.Msg) // holds the latest message seen from each node
 
@@ -118,7 +121,11 @@ func main() {
 					}
 				}
 				if allExt {
-					log.Print("all externalized")
+					allCalls := scp.NodeHandleCalls.Value()
+					theseCalls := allCalls - lastCalls
+					elapsed := scp.NodeHandleTime.Value()
+					log.Printf("all externalized (node.handle: %d calls, %s avg time)", theseCalls, time.Duration(elapsed/allCalls))
+					lastCalls = allCalls
 					looping = false
 					break
 				}
