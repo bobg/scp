@@ -150,7 +150,7 @@ func (n *Node) Handle(msg *Msg) {
 	if msg.V != n.ID && n.FQ > 0 && n.FP < n.FQ {
 		// decide whether to simulate dropping this message
 		if rand.Intn(n.FQ) < n.FP {
-			n.Logf("dropping message %s", msg)
+			n.Logf("dropping inbound message %s", msg)
 			return
 		}
 	}
@@ -180,7 +180,7 @@ func (n *Node) handle(msg *Msg) error {
 				panic("consensus failure")
 			}
 		} else {
-			n.send <- NewMsg(n.ID, msg.I, n.Q, topic)
+			n.doSend(NewMsg(n.ID, msg.I, n.Q, topic))
 		}
 		return nil
 	}
@@ -220,8 +220,19 @@ func (n *Node) handle(msg *Msg) error {
 		delete(n.pending, msg.I)
 	}
 
-	n.send <- outbound
+	n.doSend(outbound)
 	return nil
+}
+
+func (n *Node) doSend(msg *Msg) {
+	if n.FQ > 0 && n.FP < n.FQ {
+		// decide whether to simulate dropping this message
+		if rand.Intn(n.FQ) < n.FP {
+			n.Logf("dropping outbound message %s", msg)
+			return
+		}
+	}
+	n.send <- msg
 }
 
 func (n *Node) ping() error {
