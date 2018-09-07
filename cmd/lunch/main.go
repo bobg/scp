@@ -47,6 +47,12 @@ func (v valType) String() string {
 	return string(v)
 }
 
+type nodeconf struct {
+	Q  [][]string
+	FP int
+	FQ int
+}
+
 func main() {
 	seed := flag.Int64("seed", 1, "RNG seed")
 	delay := flag.Int("delay", 100, "random delay limit in milliseconds")
@@ -61,9 +67,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var conf struct {
-		Nodes map[string][][]string
-	}
+	var conf map[string]nodeconf
 	_, err = toml.Decode(string(confBits), &conf)
 	if err != nil {
 		log.Fatal(err)
@@ -71,9 +75,9 @@ func main() {
 
 	nodes := make(map[scp.NodeID]*scp.Node)
 	ch := make(chan *scp.Msg)
-	for nodeID, qstrs := range conf.Nodes {
-		q := make([]scp.NodeIDSet, 0, len(qstrs))
-		for _, slice := range qstrs {
+	for nodeID, nconf := range conf {
+		q := make([]scp.NodeIDSet, 0, len(nconf.Q))
+		for _, slice := range nconf.Q {
 			var qslice scp.NodeIDSet
 			for _, id := range slice {
 				qslice = qslice.Add(scp.NodeID(id))
@@ -81,6 +85,7 @@ func main() {
 			q = append(q, qslice)
 		}
 		node := scp.NewNode(scp.NodeID(nodeID), q, ch, nil)
+		node.FP, node.FQ = nconf.FP, nconf.FQ
 		nodes[node.ID] = node
 		go node.Run(context.Background())
 	}

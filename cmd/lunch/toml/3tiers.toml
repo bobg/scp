@@ -1,52 +1,67 @@
-[nodes]
+[alice]
+Q = [["bob", "carol"],
+     ["bob", "dave"],
+     ["carol", "dave"]]
 
-alice = [["bob", "carol"],
-         ["bob", "dave"],
-         ["carol", "dave"]]
-bob = [["alice", "carol"],
-       ["alice", "dave"],
-       ["carol", "dave"]]
-carol = [["alice", "bob"],
-         ["alice", "dave"],
-         ["bob", "dave"]]
-dave = [["alice", "bob"],
-        ["alice", "carol"],
-        ["bob", "carol"]]
+[bob]
+Q = [["alice", "carol"],
+     ["alice", "dave"],
+     ["carol", "dave"]]
 
-elsie = [["alice", "bob"],
-         ["alice", "carol"],
-         ["alice", "dave"],
-         ["bob", "carol"],
-         ["bob", "dave"],
-         ["carol", "dave"]]
-fred = [["alice", "bob"],
-        ["alice", "carol"],
-        ["alice", "dave"],
-        ["bob", "carol"],
-        ["bob", "dave"],
-        ["carol", "dave"]]
-gwen = [["alice", "bob"],
-        ["alice", "carol"],
-        ["alice", "dave"],
-        ["bob", "carol"],
-        ["bob", "dave"],
-        ["carol", "dave"]]
-hank = [["alice", "bob"],
-        ["alice", "carol"],
-        ["alice", "dave"],
-        ["bob", "carol"],
-        ["bob", "dave"],
-        ["carol", "dave"]]
+[carol]
+Q = [["alice", "bob"],
+     ["alice", "dave"],
+     ["bob", "dave"]]
 
-inez = [["elsie", "fred"],
-        ["elsie", "gwen"],
-        ["elsie", "hank"],
-        ["fred", "gwen"],
-        ["fred", "hank"],
-        ["gwen", "hank"]]
-john = [["elsie", "fred"],
-        ["elsie", "gwen"],
-        ["elsie", "hank"],
-        ["fred", "gwen"],
-        ["fred", "hank"],
-        ["gwen", "hank"]]
+[dave]
+Q = [["alice", "bob"],
+     ["alice", "carol"],
+     ["bob", "carol"]]
+
+[elsie]
+Q = [["alice", "bob"],
+     ["alice", "carol"],
+     ["alice", "dave"],
+     ["bob", "carol"],
+     ["bob", "dave"],
+     ["carol", "dave"]]
+
+[fred]
+Q = [["alice", "bob"],
+     ["alice", "carol"],
+     ["alice", "dave"],
+     ["bob", "carol"],
+     ["bob", "dave"],
+     ["carol", "dave"]]
+
+[gwen]
+Q = [["alice", "bob"],
+     ["alice", "carol"],
+     ["alice", "dave"],
+     ["bob", "carol"],
+     ["bob", "dave"],
+     ["carol", "dave"]]
+
+[hank]
+Q = [["alice", "bob"],
+     ["alice", "carol"],
+     ["alice", "dave"],
+     ["bob", "carol"],
+     ["bob", "dave"],
+     ["carol", "dave"]]
+
+[inez]
+Q = [["elsie", "fred"],
+     ["elsie", "gwen"],
+     ["elsie", "hank"],
+     ["fred", "gwen"],
+     ["fred", "hank"],
+     ["gwen", "hank"]]
+
+[john]
+Q = [["elsie", "fred"],
+     ["elsie", "gwen"],
+     ["elsie", "hank"],
+     ["fred", "gwen"],
+     ["fred", "hank"],
+     ["gwen", "hank"]]
