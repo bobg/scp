@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -29,7 +30,12 @@ type Node struct {
 	// every slice.
 	Q []NodeIDSet
 
-	mu sync.Mutex // protects pending and ext
+	// FP/FQ is a rational giving the odds that a call to Handle will fail (drop the incoming message).
+	// Self messages (from the node to itself) are never dropped.
+	// FQ==0 is treated as 0/1.
+	FP, FQ int
+
+	mu sync.Mutex
 
 	// pending holds Slot objects during nomination and balloting.
 	pending map[SlotID]*Slot
@@ -141,6 +147,13 @@ func (n *Node) rehandle(s *Slot) {
 // redundant, or older than another message already received from the
 // same sender.)
 func (n *Node) Handle(msg *Msg) {
+	if msg.V != n.ID && n.FQ > 0 && n.FP < n.FQ {
+		// decide whether to simulate dropping this message
+		if rand.Intn(n.FQ) < n.FP {
+			n.Logf("dropping message %s", msg)
+			return
+		}
+	}
 	n.recv <- &msgCmd{msg: msg}
 }
 

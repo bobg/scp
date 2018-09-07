@@ -1,4 +1,8 @@
-[nodes]
-alice = [["bob", "carol"]]
-bob = [["alice", "carol"]]
-carol = [["alice", "bob"]]
+[alice]
+Q = [["bob", "carol"]]
+
+[bob]
+Q = [["alice", "carol"]]
+
+[carol]
+Q = [["alice", "bob"]]

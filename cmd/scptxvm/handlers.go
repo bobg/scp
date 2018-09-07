@@ -179,7 +179,7 @@ func blocksHandler(w http.ResponseWriter, r *http.Request) {
 	for _, blockID := range req.BlockIDs {
 		block, err := getBlock(req.Height, blockID)
 		if err != nil {
-			httperr(w, http.StatusNotFound, "could not resolve requested block %s (height %d): %s", blockID, req.Height, err)
+			httperr(w, http.StatusNotFound, "could not resolve requested block %s (height %d): %s", blockID.String(), req.Height, err)
 			return
 		}
 		result = append(result, block)
