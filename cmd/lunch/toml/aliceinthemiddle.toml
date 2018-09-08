@@ -1,14 +1,15 @@
 [alice]
-Q = [["bob", "carol"], ["dave", "elsie"]]
+Q = [{m = 2, s = ["bob", "carol"]},
+     {m = 2, s = ["dave", "elsie"]}]
 
 [bob]
-Q = [["alice", "carol"]]
+Q = [{m = 2, s = ["alice", "carol"]}]
 
 [carol]
-Q = [["alice", "bob"]]
+Q = [{m = 2, s = ["alice", "bob"]}]
 
 [dave]
-Q = [["alice", "elsie"]]
+Q = [{m = 2, s = ["alice", "elsie"]}]
 
 [elsie]
-Q = [["alice", "dave"]]
+Q = [{m = 2, s = ["alice", "dave"]}]

@@ -48,7 +48,10 @@ func (v valType) String() string {
 }
 
 type nodeconf struct {
-	Q  [][]string
+	Q []struct {
+		M int
+		S []scp.NodeID
+	}
 	FP int
 	FQ int
 }
@@ -76,15 +79,12 @@ func main() {
 	nodes := make(map[scp.NodeID]*scp.Node)
 	ch := make(chan *scp.Msg)
 	for nodeID, nconf := range conf {
-		q := make([]scp.NodeIDSet, 0, len(nconf.Q))
-		for _, slice := range nconf.Q {
-			var qslice scp.NodeIDSet
-			for _, id := range slice {
-				qslice = qslice.Add(scp.NodeID(id))
-			}
-			q = append(q, qslice)
+		var qslices []scp.NodeIDSet
+		for _, q := range nconf.Q {
+			qq := expand(q.M, q.S)
+			qslices = append(qslices, qq...)
 		}
-		node := scp.NewNode(scp.NodeID(nodeID), q, ch, nil)
+		node := scp.NewNode(scp.NodeID(nodeID), qslices, ch, nil)
 		node.FP, node.FQ = nconf.FP, nconf.FQ
 		nodes[node.ID] = node
 		go node.Run(context.Background())
@@ -147,6 +147,30 @@ func main() {
 			}
 		}
 	}
+}
+
+func expand(m int, s []scp.NodeID) []scp.NodeIDSet {
+	var result []scp.NodeIDSet
+
+	switch m {
+	case 1:
+		for _, n := range s {
+			result = append(result, scp.NodeIDSet{n})
+		}
+
+	case len(s):
+		result = []scp.NodeIDSet{s}
+
+	default:
+		for i := 0; i <= len(s)-m; i++ {
+			pre := expand(m-1, s[i+1:])
+			for _, p := range pre {
+				result = append(result, append([]scp.NodeID{s[i]}, p...))
+			}
+		}
+	}
+
+	return result
 }
 
 var foods = []valType{
