@@ -69,7 +69,7 @@ func findQuorumHelper(threshold int, members []QSetMember, msgs map[NodeID]*Msg,
 	if threshold == 0 {
 		return sofar, pred
 	}
-	if len(members) == 0 {
+	if threshold > len(members) {
 		return nil, pred
 	}
 	m0 := members[0]
