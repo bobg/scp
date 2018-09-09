@@ -65,9 +65,9 @@ func TestWeight(t *testing.T) {
 			wantW:  0.5,
 		},
 		{
-			slices:  []string{"a b z", "a z"},
-			wantW:   1.0,
-			wantIs1: true,
+			slices:  []string{"a b", "a c", "a d", "a z"},
+			wantW:   0.25,
+			wantIs1: false,
 		},
 	}
 	for i, tc := range cases {

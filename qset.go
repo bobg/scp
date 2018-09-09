@@ -30,41 +30,32 @@ type (
 // Checks that at least one node in each quorum slice satisfies pred
 // (excluding the slot's node).
 //
-// TODO: this works by enumerating slices, which is expensive.
-// It can do better.
+// Works by finding len(q.M)-q.T+1 members for which pred is true
 func (q QSet) findBlockingSet(msgs map[NodeID]*Msg, pred predicate) (NodeIDSet, predicate) {
-	var result NodeIDSet
+	return findBlockingSetHelper(len(q.M)-q.T+1, q.M, msgs, pred, nil)
+}
 
-	memo := make(map[NodeID]bool)
-
-	q.Slices(func(slice NodeIDSet) bool {
-		found := false
-		for _, nodeID := range slice {
-			if outcome, ok := memo[nodeID]; ok {
-				if outcome {
-					found = true
-					break
-				}
-				continue
-			}
-			if msg, ok := msgs[nodeID]; ok {
-				outcome := pred.test(msg)
-				memo[nodeID] = outcome
-				if outcome {
-					pred = pred.next()
-					found = true
-					result = result.Add(nodeID)
-					break
-				}
-			}
+func findBlockingSetHelper(needed int, members []QSetMember, msgs map[NodeID]*Msg, pred predicate, sofar NodeIDSet) (NodeIDSet, predicate) {
+	if needed == 0 {
+		return sofar, pred
+	}
+	if needed > len(members) {
+		return nil, pred
+	}
+	m0 := members[0]
+	switch {
+	case m0.N != nil:
+		if msg, ok := msgs[*m0.N]; ok && pred.test(msg) {
+			return findBlockingSetHelper(needed-1, members[1:], msgs, pred.next(), sofar.Add(*m0.N))
 		}
-		if !found {
-			result = nil
-		}
-		return !found
-	})
 
-	return result, pred
+	case m0.Q != nil:
+		sofar2, pred2 := findBlockingSetHelper(len(m0.Q.M)-m0.Q.T+1, m0.Q.M, msgs, pred, sofar)
+		if len(sofar2) > 0 {
+			return findBlockingSetHelper(needed-1, members[1:], msgs, pred2, sofar2)
+		}
+	}
+	return findBlockingSetHelper(needed, members[1:], msgs, pred, sofar)
 }
 
 // Finds a quorum in which every node satisfies the given
