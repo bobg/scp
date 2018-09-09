@@ -141,39 +141,15 @@ func main() {
 	}
 }
 
-func expand(m int, s []scp.NodeID) []scp.NodeIDSet {
-	var result []scp.NodeIDSet
-
-	switch m {
-	case 1:
-		for _, n := range s {
-			result = append(result, scp.NodeIDSet{n})
-		}
-
-	case len(s):
-		result = []scp.NodeIDSet{s}
-
-	default:
-		for i := 0; i <= len(s)-m; i++ {
-			pre := expand(m-1, s[i+1:])
-			for _, p := range pre {
-				result = append(result, append([]scp.NodeID{s[i]}, p...))
-			}
-		}
-	}
-
-	return result
-}
-
 var foods = []valType{
-	"pizza",
 	"burgers",
 	"burritos",
-	"sandwiches",
-	"sushi",
-	"salads",
 	"gyros",
 	"indian",
-	"soup",
 	"pasta",
+	"pizza",
+	"salads",
+	"sandwiches",
+	"soup",
+	"sushi",
 }
