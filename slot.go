@@ -415,11 +415,11 @@ func (s *Slot) updateB() {
 	// pending timers associated with the old "counter".)
 	var (
 		doSetBX bool
-		setBN   int
+		setBN   = s.B.N
 	)
 	for { // loop until no such blocking set is found
 		nodeIDs := s.findBlockingSet(fpred(func(msg *Msg) bool {
-			return msg.bN() > s.B.N
+			return msg.bN() > setBN
 		}))
 		if len(nodeIDs) == 0 {
 			break
@@ -440,7 +440,7 @@ func (s *Slot) updateB() {
 		}
 	}
 
-	if setBN == 0 {
+	if setBN == s.B.N {
 		return
 	}
 
