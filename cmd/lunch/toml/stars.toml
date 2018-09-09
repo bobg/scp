@@ -1,0 +1,174 @@
+["Michelle Obama"]
+Q = {t = 2, m = [{q = {t = 6, m = [{n = "Ryan Reynolds"}, {n = "Bill Irwin"}, {n = "Hugh Jackman"}, {n = "Eva Longoria"}, {n = "Fred Penner"}, {n = "Cameron Diaz"}, {n = "Ricky Gervais"}, {n = "Anna Faris"}, {n = "Joe Namath"}]}}, {q = {t = 2, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}}]}
+
+["Joe Namath"]
+Q = {t = 4, m = [{n = "Zac Efron"}, {n = "Celine Dion"}, {n = "Joe Namath"}, {n = "Anna Faris"}, {n = "Ryan Reynolds"}]}
+
+["Zac Efron"]
+Q = {t = 2, m = [{n = "Amy Poehler"}, {n = "Celine Dion"}, {n = "Zac Efron"}]}
+
+["Celine Dion"]
+Q = {t = 2, m = [{n = "Amy Poehler"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Anna Faris"}]}
+
+["Fran Drescher"]
+Q = {t = 2, m = [{q = {t = 2, m = [{n = "Anna Faris"}, {n = "Joe Namath"}]}}, {q = {t = 2, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}}]}
+
+["Anna Faris"]
+Q = {t = 3, m = [{n = "Anna Faris"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Ryan Reynolds"]
+Q = {t = 3, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {n = "Anna Faris"}]}
+
+["Kelly Ripa"]
+Q = {t = 4, m = [{n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {n = "Adam Sandler"}]}
+
+["Amy Poehler"]
+Q = {t = 2, m = [{n = "Amy Poehler"}, {n = "Celine Dion"}, {n = "Zac Efron"}]}
+
+["Michael Jackson"]
+Q = {t = 7, m = [{n = "Allison Janney"}, {n = "Anna Faris"}, {n = "Mindy Kaling"}, {n = "Peter Ustinov"}, {n = "Brad Garrett"}, {q = {t = 2, m = [{n = "Cameron Diaz"}, {n = "Ricky Gervais"}]}}, {q = {t = 3, m = [{n = "Amy Adams"}, {n = "Eva Longoria"}, {n = "Fred Penner"}, {n = "Roger Ebert"}, {n = "Howie Mandel"}]}}, {q = {t = 2, m = [{n = "Ryan Reynolds"}, {n = "Bill Irwin"}, {n = "Hugh Jackman"}]}}, {q = {t = 5, m = [{n = "Michelle Obama"}, {n = "Andrea Martin"}, {n = "Mel Gibson"}, {n = "Dennis Quaid"}, {n = "Jason Bateman"}, {n = "Rick Moranis"}, {n = "Eric Idle"}, {n = "Tom Hanks"}, {n = "Fran Drescher"}]}}, {q = {t = 3, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {n = "Barbara Eden"}, {n = "Joe Namath"}]}}]}
+
+["Andrea Martin"]
+Q = {t = 2, m = [{q = {t = 6, m = [{n = "Fran Drescher"}, {n = "Tom Hanks"}, {n = "Ryan Reynolds"}, {n = "Bill Irwin"}, {n = "Hugh Jackman"}, {n = "Cameron Diaz"}, {n = "Ricky Gervais"}, {n = "Anna Faris"}, {n = "Joe Namath"}]}}, {q = {t = 2, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}}]}
+
+["Cameron Diaz"]
+Q = {t = 6, m = [{n = "Michael Jackson"}, {n = "Anna Faris"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Bill Irwin"}, {n = "Barbara Eden"}, {n = "Joe Namath"}, {n = "Hugh Jackman"}, {n = "Mel Gibson"}]}
+
+["James Taylor"]
+Q = {t = 4, m = [{n = "Celine Dion"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Eric Idle"]
+Q = {t = 2, m = [{q = {t = 6, m = [{n = "Tom Hanks"}, {n = "Rick Moranis"}, {n = "Ryan Reynolds"}, {n = "Bill Irwin"}, {n = "Hugh Jackman"}, {n = "Cameron Diaz"}, {n = "Ricky Gervais"}, {n = "Anna Faris"}, {n = "Joe Namath"}]}}, {q = {t = 2, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}}]}
+
+["Fred Penner"]
+Q = {t = 5, m = [{n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Anne Hathaway"]
+Q = {t = 6, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Dennis Quaid"]
+Q = {t = 2, m = [{q = {t = 6, m = [{n = "Ryan Reynolds"}, {n = "Bill Irwin"}, {n = "Hugh Jackman"}, {n = "Eva Longoria"}, {n = "Fred Penner"}, {n = "Cameron Diaz"}, {n = "Ricky Gervais"}, {n = "Anna Faris"}, {n = "Joe Namath"}]}}, {q = {t = 2, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}}]}
+
+["Mel Gibson"]
+Q = {t = 2, m = [{q = {t = 2, m = [{n = "Anna Faris"}, {n = "Joe Namath"}]}}, {q = {t = 2, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}}]}
+
+["Jessica Alba"]
+Q = {t = 4, m = [{n = "Celine Dion"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Roger Ebert"]
+Q = {t = 5, m = [{n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Ricky Gervais"]
+Q = {t = 6, m = [{n = "Michael Jackson"}, {n = "Anna Faris"}, {n = "Bill Irwin"}, {n = "Amy Poehler"}, {n = "Zac Efron"}, {n = "Richard Kind"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Fran Drescher"}]}
+
+["Rick Moranis"]
+Q = {t = 2, m = [{q = {t = 6, m = [{n = "Tom Hanks"}, {n = "Eric Idle"}, {n = "Ryan Reynolds"}, {n = "Bill Irwin"}, {n = "Hugh Jackman"}, {n = "Cameron Diaz"}, {n = "Ricky Gervais"}, {n = "Anna Faris"}, {n = "Joe Namath"}]}}, {q = {t = 2, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}}]}
+
+["Jason Bateman"]
+Q = {t = 2, m = [{q = {t = 6, m = [{n = "Ryan Reynolds"}, {n = "Bill Irwin"}, {n = "Hugh Jackman"}, {n = "Eva Longoria"}, {n = "Fred Penner"}, {n = "Cameron Diaz"}, {n = "Ricky Gervais"}, {n = "Anna Faris"}, {n = "Joe Namath"}]}}, {q = {t = 2, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}}]}
+
+["Liam Neeson"]
+Q = {t = 6, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Eva Longoria"]
+Q = {t = 5, m = [{n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Howie Mandel"]
+Q = {t = 5, m = [{n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Adam Sandler"]
+Q = {t = 9, m = [{n = "Kelly Ripa"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Barbara Eden"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {n = "Tom Hanks"}, {n = "Eric Idle"}, {n = "Mel Gibson"}]}
+
+["Amy Adams"]
+Q = {t = 5, m = [{n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Tom Hanks"]
+Q = {t = 4, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {n = "Mel Gibson"}, {n = "Eric Idle"}, {n = "Fran Drescher"}]}
+
+["Larry King"]
+Q = {t = 4, m = [{n = "Larry King"}, {n = "Anna Faris"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Buzz Aldrin"]
+Q = {t = 6, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Donald Faison"]
+Q = {t = 6, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Brad Garrett"]
+Q = {t = 4, m = [{n = "Celine Dion"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["John Candy"]
+Q = {t = 4, m = [{n = "Ryan Reynolds"}, {n = "Bill Irwin"}, {n = "Hugh Jackman"}, {q = {t = 5, m = [{n = "Michelle Obama"}, {n = "Andrea Martin"}, {n = "Mel Gibson"}, {n = "Eric Idle"}, {n = "Rick Moranis"}, {n = "Dennis Quaid"}, {n = "Jason Bateman"}, {n = "Tom Hanks"}, {n = "Fran Drescher"}]}}, {q = {t = 2, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}}]}
+
+["Hugh Jackman"]
+Q = {t = 7, m = [{n = "Ryan Reynolds"}, {n = "Bill Irwin"}, {n = "Hugh Jackman"}, {n = "Anna Faris"}, {n = "Barbara Eden"}, {n = "Joe Namath"}, {n = "Michael Jackson"}, {q = {t = 3, m = [{n = "Amy Adams"}, {n = "Eva Longoria"}, {n = "Fred Penner"}, {n = "Roger Ebert"}, {n = "Howie Mandel"}]}}, {q = {t = 2, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}}, {q = {t = 5, m = [{n = "Michelle Obama"}, {n = "Andrea Martin"}, {n = "Mel Gibson"}, {n = "Eric Idle"}, {n = "Rick Moranis"}, {n = "Dennis Quaid"}, {n = "Jason Bateman"}, {n = "Tom Hanks"}, {n = "Fran Drescher"}]}}]}
+
+["Bill Irwin"]
+Q = {t = 3, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {n = "Anna Faris"}]}
+
+["Barbara Eden"]
+Q = {t = 6, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Jim Carrey"]
+Q = {t = 8, m = [{n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Tony Hawk"}, {n = "Jim Carrey"}, {n = "Ralph Nader"}, {n = "Michael Jackson"}, {n = "Kristen Bell"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Mindy Kaling"]
+Q = {t = 3, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {q = {t = 6, m = [{n = "Mindy Kaling"}, {n = "Alec Baldwin"}, {n = "John Candy"}, {n = "Peter Ustinov"}, {n = "Rick Moranis"}, {n = "Christopher Lloyd"}, {n = "Barbara Eden"}, {n = "Brad Garrett"}, {n = "Cameron Diaz"}, {n = "Michael Jackson"}]}}]}
+
+["Alec Baldwin"]
+Q = {t = 3, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {q = {t = 6, m = [{n = "Mindy Kaling"}, {n = "Alec Baldwin"}, {n = "Allison Janney"}, {n = "Adam Sandler"}, {n = "Jason Bateman"}, {n = "Richard Kind"}, {n = "Anne Hathaway"}, {n = "Charlize Theron"}, {n = "Ricky Gervais"}, {n = "Michael Jackson"}]}}]}
+
+["Allison Janney"]
+Q = {t = 6, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Jeremy Irons"]
+Q = {t = 4, m = [{n = "Celine Dion"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Zachary Quinto"]
+Q = {t = 5, m = [{n = "Howie Mandel"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Richard Kind"]
+Q = {t = 6, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Mel Gibson"}, {n = "Michael Jackson"}]}
+
+["Christopher Lloyd"]
+Q = {t = 7, m = [{n = "Fred Penner"}, {n = "Anna Faris"}, {n = "Eric Idle"}, {n = "Tom Hanks"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Marisa Tomei"]
+Q = {t = 3, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {q = {t = 3, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}]}}]}
+
+["Sandra Oh"]
+Q = {t = 3, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {q = {t = 3, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}]}}]}
+
+["Zoe Saldana"]
+Q = {t = 3, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {q = {t = 3, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}]}}]}
+
+["Charlize Theron"]
+Q = {t = 6, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}, {n = "Michael Jackson"}, {n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Christopher Reeve"]
+Q = {t = 4, m = [{n = "Celine Dion"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Donny Osmond"]
+Q = {t = 5, m = [{n = "Celine Dion"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {q = {t = 3, m = [{n = "Donny Osmond"}, {n = "Marisa Tomei"}, {n = "Andy Samberg"}, {n = "Jimmy Fallon"}]}}]}
+
+["Jim Parsons"]
+Q = {t = 4, m = [{n = "Celine Dion"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
+["Tracey Ullman"]
+Q = {t = 3, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {q = {t = 3, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}]}}]}
+
+["Michael Landon"]
+Q = {t = 4, m = [{n = "Jessica Alba"}, {n = "Michael Landon"}, {n = "Korina Sanchez"}, {n = "Anna Faris"}, {n = "Celine Dion"}]}
+
+["Korina Sanchez"]
+Q = {t = 4, m = [{n = "Jessica Alba"}, {n = "Michael Landon"}, {n = "Korina Sanchez"}, {n = "Anna Faris"}, {n = "Cab Calloway"}]}
+
+["Jimmy Fallon"]
+Q = {t = 3, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {q = {t = 3, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}]}}]}
+
+["Andy Samberg"]
+Q = {t = 3, m = [{n = "Celine Dion"}, {n = "Zac Efron"}, {n = "Amy Poehler"}, {q = {t = 3, m = [{n = "Amy Adams"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Ryan Reynolds"}]}}]}
+
+["Paul Reubens"]
+Q = {t = 4, m = [{n = "Celine Dion"}, {n = "Anna Faris"}, {n = "Joe Namath"}, {n = "Zac Efron"}, {n = "Amy Poehler"}]}
+
