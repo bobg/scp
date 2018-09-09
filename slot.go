@@ -458,13 +458,13 @@ func (s *Slot) updateB() {
 		s.Logf("limiting B.N to %d (from %d)", maxBN, setBN)
 		s.B.N = maxBN
 	} else {
-		setBN = s.B.N + 1
+		setBN = maxBN + 1
 
 		// The time when it's ok to set s.B.N to setBN (i.e., after it's been running for setBN-1000 seconds)
 		oktime := s.T.Add(time.Duration(setBN-1000) * time.Second)
 		until := time.Until(oktime)
 
-		s.Logf("limiting B.N to %d (from %d) after a %s sleep", maxBN, setBN, until)
+		s.Logf("limiting B.N to %d after a %s sleep", setBN, until)
 		time.Sleep(until)
 		s.B.N = setBN
 	}
