@@ -23,7 +23,7 @@ type (
 		C int32
 		V string
 		I int
-		Q [][]string
+		Q scp.QSet
 		T marshaledTopic
 	}
 
@@ -41,15 +41,6 @@ type (
 )
 
 func marshal(msg *scp.Msg) ([]byte, error) {
-	var q [][]string
-	for _, slice := range msg.Q {
-		var qslice []string
-		for _, id := range slice {
-			qslice = append(qslice, string(id))
-		}
-		q = append(q, qslice)
-	}
-
 	var mt marshaledTopic
 	switch topic := msg.T.(type) {
 	case *scp.NomTopic:
@@ -96,7 +87,7 @@ func marshal(msg *scp.Msg) ([]byte, error) {
 		C: msg.C,
 		V: string(msg.V),
 		I: int(msg.I),
-		Q: q,
+		Q: msg.Q,
 		T: mt,
 	}
 	mpbytes, err := json.Marshal(mp) // xxx json is subject to mutation in transit!
@@ -157,15 +148,6 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 		return nil, errors.New("bad signature")
 	}
 
-	var q []scp.NodeIDSet
-	for _, slice := range mp.Q {
-		var qslice scp.NodeIDSet
-		for _, id := range slice {
-			qslice = qslice.Add(scp.NodeID(id))
-		}
-		q = append(q, qslice)
-	}
-
 	var topic scp.Topic
 	switch scp.Phase(mp.T.Type) {
 	case scp.PhNom:
@@ -212,7 +194,7 @@ func unmarshal(b []byte) (*scp.Msg, error) {
 		C: mp.C,
 		V: scp.NodeID(mp.V),
 		I: scp.SlotID(mp.I),
-		Q: q,
+		Q: mp.Q,
 		T: topic,
 	}
 	return msg, nil

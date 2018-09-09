@@ -1,19 +1,11 @@
 [alice]
-Q = [["bob", "carol"],
-     ["bob", "dave"],
-     ["carol", "dave"]]
+Q = {t = 2, m = [{n = "bob"}, {n = "carol"}, {n = "dave"}]}
 
 [bob]
-Q = [["alice", "carol"],
-     ["alice", "dave"],
-     ["carol", "dave"]]
+Q = {t = 2, m = [{n = "alice"}, {n = "carol"}, {n = "dave"}]}
 
 [carol]
-Q = [["alice", "bob"],
-     ["alice", "dave"],
-     ["bob", "dave"]]
+Q = {t = 2, m = [{n = "alice"}, {n = "bob"}, {n = "dave"}]}
 
 [dave]
-Q = [["alice", "bob"],
-     ["alice", "carol"],
-     ["bob", "carol"]]
+Q = {t = 2, m = [{n = "alice"}, {n = "bob"}, {n = "carol"}]}

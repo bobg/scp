@@ -40,14 +40,14 @@ func TestFindBlockingSet(t *testing.T) {
 		t.Run(fmt.Sprintf("%02d", i+1), func(t *testing.T) {
 			network := toNetwork(tc.network)
 			ch := make(chan *Msg)
-			node := NewNode("x", network["x"], ch, nil)
+			node := NewNode("x", slicesToQSet(network["x"]), ch, nil)
 			slot, _ := newSlot(1, node)
 			for _, vstr := range strings.Fields(tc.msgs) {
 				v := NodeID(vstr)
 				slot.M[v] = &Msg{
 					V: v,
 					I: 1,
-					Q: network[v],
+					Q: slicesToQSet(network[v]),
 				}
 			}
 			got := slot.findBlockingSet(fpred(func(msg *Msg) bool {

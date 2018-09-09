@@ -48,7 +48,7 @@ func (v valType) String() string {
 }
 
 type nodeconf struct {
-	Q  [][]string
+	Q  scp.QSet
 	FP int
 	FQ int
 }
@@ -76,15 +76,7 @@ func main() {
 	nodes := make(map[scp.NodeID]*scp.Node)
 	ch := make(chan *scp.Msg)
 	for nodeID, nconf := range conf {
-		q := make([]scp.NodeIDSet, 0, len(nconf.Q))
-		for _, slice := range nconf.Q {
-			var qslice scp.NodeIDSet
-			for _, id := range slice {
-				qslice = qslice.Add(scp.NodeID(id))
-			}
-			q = append(q, qslice)
-		}
-		node := scp.NewNode(scp.NodeID(nodeID), q, ch, nil)
+		node := scp.NewNode(scp.NodeID(nodeID), nconf.Q, ch, nil)
 		node.FP, node.FQ = nconf.FP, nconf.FQ
 		nodes[node.ID] = node
 		go node.Run(context.Background())
@@ -150,14 +142,14 @@ func main() {
 }
 
 var foods = []valType{
-	"pizza",
 	"burgers",
 	"burritos",
-	"sandwiches",
-	"sushi",
-	"salads",
 	"gyros",
 	"indian",
-	"soup",
 	"pasta",
+	"pizza",
+	"salads",
+	"sandwiches",
+	"soup",
+	"sushi",
 }
