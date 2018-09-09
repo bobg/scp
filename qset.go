@@ -1,6 +1,12 @@
 package scp
 
 type (
+	// QSet is a compact representation for a set of quorum slices.
+	// A quorum slice is any T items from M,
+	// where 0 < T <= len(M).
+	// An item in M is either a node or a nested QSet.
+	// If the latter,
+	// any of the recursively defined subslices count as one "item" here.
 	QSet struct {
 		T int          `json:"threshold"`
 		M []QSetMember `json:"members"`
