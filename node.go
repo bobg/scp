@@ -24,10 +24,11 @@ func (n NodeID) Less(other NodeID) bool { return n < other }
 type Node struct {
 	ID NodeID
 
-	// Q is the node's set of quorum slices. For compactness it does not
-	// include the node itself, though the node is understood to be in
-	// every slice.
-	Q []NodeIDSet
+	// Q is the node's set of quorum slices.
+	// For compactness,
+	// this representation does not include the node itself,
+	// though the node is understood to be in every slice.
+	Q QSet
 
 	// FP/FQ is a rational giving the odds that a call to Handle will fail (drop the incoming message).
 	// Self messages (from the node to itself) are never dropped.
@@ -48,7 +49,7 @@ type Node struct {
 }
 
 // NewNode produces a new node.
-func NewNode(id NodeID, q []NodeIDSet, ch chan<- *Msg, ext map[SlotID]*ExtTopic) *Node {
+func NewNode(id NodeID, q QSet, ch chan<- *Msg, ext map[SlotID]*ExtTopic) *Node {
 	if ext == nil {
 		ext = make(map[SlotID]*ExtTopic)
 	}
@@ -258,28 +259,16 @@ func (n *Node) Weight(id NodeID) (float64, bool) {
 	if id == n.ID {
 		return 1.0, true
 	}
-	count := 0
-	for _, slice := range n.Q {
-		for _, thisID := range slice {
-			if id == thisID {
-				count++
-				break
-			}
-		}
-	}
-	if count == len(n.Q) {
-		return 1.0, true
-	}
-	return float64(count) / float64(len(n.Q)), false
+	return n.Q.weight(id)
 }
 
 // Peers returns a flattened, uniquified list of the node IDs in n's
 // quorum slices, not including n's own ID.
 func (n *Node) Peers() NodeIDSet {
 	var result NodeIDSet
-	for _, slice := range n.Q {
-		result = result.Union(slice)
-	}
+	n.Q.slices(func(s NodeIDSet) {
+		result = result.Union(s)
+	})
 	return result
 }
 
@@ -332,21 +321,18 @@ func (n *Node) Priority(i SlotID, num int, nodeID NodeID) ([32]byte, error) {
 	return n.G(i, m.Bytes())
 }
 
-// AllKnown gives the complete set of reachable node IDs, excluding
-// n.ID.
+// AllKnown gives the complete set of reachable node IDs,
+// excluding n.ID.
 func (n *Node) AllKnown() NodeIDSet {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	var result NodeIDSet
-	for _, slice := range n.Q {
-		result = result.Union(slice)
-	}
+	result := n.Peers()
 	for _, s := range n.pending {
 		for _, msg := range s.M {
-			for _, slice := range msg.Q {
-				result = result.Union(slice)
-			}
+			msg.Q.slices(func(ns NodeIDSet) {
+				result = result.Union(ns)
+			})
 		}
 	}
 	result = result.Remove(n.ID)

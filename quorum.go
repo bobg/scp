@@ -29,88 +29,16 @@ package scp
 // Checks that at least one node in each quorum slice satisfies pred
 // (excluding the slot's node).
 func (s *Slot) findBlockingSet(pred predicate) NodeIDSet {
-	var result NodeIDSet
-	for _, slice := range s.V.Q {
-		var found bool
-		for _, nodeID := range slice {
-			if msg, ok := s.M[nodeID]; ok && pred.test(msg) {
-				found = true
-				result = result.Add(nodeID)
-				pred = pred.next()
-				break
-			}
-		}
-		if !found {
-			return nil
-		}
-	}
-	return result
+	res, _ := s.V.Q.findBlockingSet(s.M, pred)
+	return res
 }
 
 // Finds a quorum in which every node satisfies the given
 // predicate. The slot's node itself is presumed to satisfy the
 // predicate.
 func (s *Slot) findQuorum(pred predicate) NodeIDSet {
-	ns := NodeIDSet{s.V.ID}
-	ns, _ = s.findNodeQuorum(s.V.ID, s.V.Q, pred, ns)
-	return ns
-}
-
-// Helper function for findQuorum. It checks that the given node
-// (whose set of quorum slices is also given) has at least one slice
-// whose members (and the transitive closure over them) all satisfy
-// the given predicate.
-//
-// Relies on recursion (specifically, mutual recursion with
-// findSliceQuorum, below) to allow backtracking. In particular, known
-// and pred evolve as passing nodes are discovered but must be able to
-// revert to earlier values when unwinding the stack. Known is the set
-// of nodes known to be in the quorum, pred is the latest iteration of
-// the predicate. Searching is complete when encountering a slice that
-// doesn't expand the set of known nodes.
-//
-// Returns the quorum NodeIDSet and pred on success, nil and the
-// original pred on failure.
-func (s *Slot) findNodeQuorum(nodeID NodeID, q []NodeIDSet, pred predicate, known NodeIDSet) (NodeIDSet, predicate) {
-	for _, slice := range q {
-		result, nextPred := s.findSliceQuorum(slice, pred, known)
-		if len(result) > 0 {
-			return result, nextPred
-		}
-	}
-	return nil, pred
-}
-
-// Helper function for findNodeQuorum. It checks whether every node in
-// a given quorum slice (and the transitive closure over them)
-// satisfies the given predicate.
-//
-// Relies on recursion (specifically, mutual recursion with
-// findNodeQuorum) to allow easy backtracking.
-//
-// Returns the quorum NodeIDSet and pred on success, nil and the
-// original pred on failure.
-func (s *Slot) findSliceQuorum(slice NodeIDSet, pred predicate, known NodeIDSet) (NodeIDSet, predicate) {
-	newNodeIDs := slice.Minus(known)
-	if len(newNodeIDs) == 0 {
-		return known, pred
-	}
-	origPred := pred
-	for _, nodeID := range newNodeIDs {
-		if msg, ok := s.M[nodeID]; !ok || !pred.test(msg) {
-			return nil, origPred
-		}
-		pred = pred.next()
-	}
-	known = known.Union(newNodeIDs)
-	for _, nodeID := range newNodeIDs {
-		msg := s.M[nodeID]
-		known, pred = s.findNodeQuorum(nodeID, msg.Q, pred, known)
-		if len(known) == 0 {
-			return nil, origPred
-		}
-	}
-	return known, pred
+	res, _ := s.V.Q.findQuorum(s.V.ID, s.M, pred)
+	return res
 }
 
 // Tells whether a statement can be accepted, either because a

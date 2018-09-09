@@ -9,17 +9,17 @@ import (
 
 // Msg is an SCP protocol message.
 type Msg struct {
-	C int32       // A counter for identifying this envelope, does not participate in the protocol.
-	V NodeID      // ID of the node sending this message.
-	I SlotID      // ID of the slot that this message is about.
-	Q []NodeIDSet // Quorum slices of the sending node.
-	T Topic       // The payload: a *NomTopic, a *NomPrepTopic, *PrepTopic, *CommitTopic, or *ExtTopic.
+	C int32  // A counter for identifying this envelope, does not participate in the protocol.
+	V NodeID // ID of the node sending this message.
+	I SlotID // ID of the slot that this message is about.
+	Q QSet   // Quorum slices of the sending node.
+	T Topic  // The payload: a *NomTopic, a *NomPrepTopic, *PrepTopic, *CommitTopic, or *ExtTopic.
 }
 
 var msgCounter int32
 
 // NewMsg produces a new message.
-func NewMsg(v NodeID, i SlotID, q []NodeIDSet, t Topic) *Msg {
+func NewMsg(v NodeID, i SlotID, q QSet, t Topic) *Msg {
 	c := atomic.AddInt32(&msgCounter, 1)
 	return &Msg{
 		C: c,
