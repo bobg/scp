@@ -1,5 +1,11 @@
 package scp
 
+import (
+	"bytes"
+	"fmt"
+	"math/big"
+)
+
 type (
 	// QSet is a compact representation for a set of quorum slices.
 	// A quorum slice is any T items from M,
@@ -23,12 +29,15 @@ type (
 
 // Checks that at least one node in each quorum slice satisfies pred
 // (excluding the slot's node).
+//
+// TODO: this works by enumerating slices, which is expensive.
+// It can do better.
 func (q QSet) findBlockingSet(msgs map[NodeID]*Msg, pred predicate) (NodeIDSet, predicate) {
 	var result NodeIDSet
 
 	memo := make(map[NodeID]bool)
 
-	q.slices(func(slice NodeIDSet) bool {
+	q.Slices(func(slice NodeIDSet) bool {
 		found := false
 		for _, nodeID := range slice {
 			if outcome, ok := memo[nodeID]; ok {
@@ -52,7 +61,7 @@ func (q QSet) findBlockingSet(msgs map[NodeID]*Msg, pred predicate) (NodeIDSet, 
 		if !found {
 			result = nil
 		}
-		return found
+		return !found
 	})
 
 	return result, pred
@@ -99,68 +108,117 @@ func findQuorumHelper(threshold int, members []QSetMember, msgs map[NodeID]*Msg,
 // (as an optimization)
 // a bool indicating whether it's exactly 1.
 func (q QSet) weight(id NodeID) (float64, bool) {
-	// TODO: this implementation generates all the slices and tests each for the presence of id.
-	// A smarter implementation would use math.
-	// In a set of N nodes that contains id,
-	// with threshold T,
-	// weight is: (N-1 choose T-1) / (N choose T), which is T/N.
-	// But I'm less sure about the math when nested QSets are involved.
-
-	var num, denom int
-	q.slices(func(n NodeIDSet) bool {
-		denom++
-		if n.Contains(id) {
-			num++
-		}
-		return true
-	})
-
+	num, denom := q.NodeFrac(id)
 	if num == denom {
 		return 1.0, true
 	}
 	return float64(num) / float64(denom), false
 }
 
-func (q QSet) slices(f func(NodeIDSet) bool) {
-	slicesHelper(q.T, q.M, f, nil)
+// Slices calls f once for each slice represented by q.
+// It continues until all slices have been generated or f returns false to terminate early.
+func (q QSet) Slices(f func(NodeIDSet) bool) {
+	slicesHelper(q.T, q.M, f, nil, 0)
 }
 
-// t > 0
-func slicesHelper(t int, members []QSetMember, f func(NodeIDSet) bool, sofar NodeIDSet) {
-	if t > len(members) {
-		return
+func slicesHelper(t int, members []QSetMember, f func(NodeIDSet) bool, sofar NodeIDSet, depth int) (out bool) {
+	if t == 0 {
+		return f(sofar)
 	}
-
-	if t == 1 {
-		for _, m := range members {
-			switch {
-			case m.N != nil:
-				if !f(sofar.Add(*m.N)) {
-					return
-				}
-
-			case m.Q != nil:
-				slicesHelper(m.Q.T, m.Q.M, f, sofar)
-			}
-		}
-		return
+	if t > len(members) {
+		return true
 	}
 
 	m0 := members[0]
 	switch {
 	case m0.N != nil:
-		slicesHelper(t-1, members[1:], f, append(sofar, *m0.N))
+		if !slicesHelper(t-1, members[1:], f, append(sofar, *m0.N), depth+1) {
+			return false
+		}
 
 	case m0.Q != nil:
-		slicesHelper(
+		ok := slicesHelper(
 			m0.Q.T,
 			m0.Q.M,
-			func(n NodeIDSet) bool {
-				slicesHelper(t-1, members[1:], f, sofar.Union(n))
-				return true
+			func(slice NodeIDSet) bool {
+				return slicesHelper(t-1, members[1:], f, sofar.Union(slice), depth+1)
 			},
 			sofar,
+			depth+1,
 		)
+		if !ok {
+			return false
+		}
 	}
-	slicesHelper(t, members[1:], f, sofar)
+	return slicesHelper(t, members[1:], f, sofar, depth+1)
+}
+
+// Nodes returns a flattened set of all nodes contained in q and its nested QSets.
+func (q QSet) Nodes() NodeIDSet {
+	var result NodeIDSet
+
+	for _, m := range q.M {
+		switch {
+		case m.N != nil:
+			result = result.Add(*m.N)
+
+		case m.Q != nil:
+			result = result.Union(m.Q.Nodes())
+		}
+	}
+
+	return result
+}
+
+func (q QSet) NumSlices() *big.Int {
+	result := new(big.Int)
+	result.Binomial(int64(len(q.M)), int64(q.T))
+	for _, m := range q.M {
+		if m.Q != nil {
+			result.Mul(result, m.Q.NumSlices())
+		}
+	}
+	return result
+}
+
+// NodeFrac gives the fraction of slices in q containing the given node.
+// It assumes that id appears in at most one QSet
+// (either the top level one or a single reachable nested one)
+// and then only once in that QSet.
+func (q QSet) NodeFrac(id NodeID) (num, denom int) {
+	for _, m := range q.M {
+		switch {
+		case m.N != nil:
+			if *m.N == id {
+				return q.T, len(q.M)
+			}
+
+		case m.Q != nil:
+			num2, denom2 := m.Q.NodeFrac(id)
+			if num2 > 0 {
+				return q.T * num2, len(q.M) * denom2
+			}
+		}
+	}
+	return 0, 1
+}
+
+func (m QSetMember) String() string {
+	switch {
+	case m.N != nil:
+		return fmt.Sprintf("N:%s", *m.N)
+
+	case m.Q != nil:
+		b := new(bytes.Buffer)
+		fmt.Fprintf(b, "Q:{T=%d [", m.Q.T)
+		for i, mm := range m.Q.M {
+			if i > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(mm.String())
+		}
+		fmt.Fprint(b, "]}")
+		return b.String()
+	}
+	return ""
 }

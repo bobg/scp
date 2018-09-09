@@ -265,12 +265,7 @@ func (n *Node) Weight(id NodeID) (float64, bool) {
 // Peers returns a flattened, uniquified list of the node IDs in n's
 // quorum slices, not including n's own ID.
 func (n *Node) Peers() NodeIDSet {
-	var result NodeIDSet
-	n.Q.slices(func(s NodeIDSet) bool {
-		result = result.Union(s)
-		return true
-	})
-	return result
+	return n.Q.Nodes()
 }
 
 // Neighbors produces a deterministic subset of a node's peers (which
@@ -331,10 +326,7 @@ func (n *Node) AllKnown() NodeIDSet {
 	result := n.Peers()
 	for _, s := range n.pending {
 		for _, msg := range s.M {
-			msg.Q.slices(func(ns NodeIDSet) bool {
-				result = result.Union(ns)
-				return true
-			})
+			result = result.Union(msg.Q.Nodes())
 		}
 	}
 	result = result.Remove(n.ID)
