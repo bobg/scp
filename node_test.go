@@ -101,14 +101,14 @@ func toNodeIDSet(s string) NodeIDSet {
 }
 
 func slicesToQSet(slices []NodeIDSet) QSet {
-	result := QSet{Threshold: 1}
+	result := QSet{T: 1}
 	for _, slice := range slices {
-		sub := QSet{Threshold: len(slice)}
+		sub := QSet{T: len(slice)}
 		for _, nodeID := range slice {
 			nodeID := nodeID
-			sub.Members = append(sub.Members, QSetMember{NodeID: &nodeID})
+			sub.M = append(sub.M, QSetMember{N: &nodeID})
 		}
-		result.Members = append(result.Members, QSetMember{QSet: &sub})
+		result.M = append(result.M, QSetMember{Q: &sub})
 	}
 	return result
 }

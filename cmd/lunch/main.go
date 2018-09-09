@@ -48,10 +48,7 @@ func (v valType) String() string {
 }
 
 type nodeconf struct {
-	Q []struct {
-		M int
-		S []scp.NodeID
-	}
+	Q  scp.QSet
 	FP int
 	FQ int
 }
@@ -79,12 +76,7 @@ func main() {
 	nodes := make(map[scp.NodeID]*scp.Node)
 	ch := make(chan *scp.Msg)
 	for nodeID, nconf := range conf {
-		var qslices []scp.NodeIDSet
-		for _, q := range nconf.Q {
-			qq := expand(q.M, q.S)
-			qslices = append(qslices, qq...)
-		}
-		node := scp.NewNode(scp.NodeID(nodeID), qslices, ch, nil)
+		node := scp.NewNode(scp.NodeID(nodeID), nconf.Q, ch, nil)
 		node.FP, node.FQ = nconf.FP, nconf.FQ
 		nodes[node.ID] = node
 		go node.Run(context.Background())

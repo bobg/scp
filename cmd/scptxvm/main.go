@@ -44,6 +44,7 @@ var (
 func main() {
 	bgctx = context.Background()
 	bgctx, bgcancel = context.WithCancel(bgctx)
+	defer bgcancel()
 
 	var (
 		confFile         string
@@ -67,7 +68,7 @@ func main() {
 	var conf struct {
 		Addr string
 		Prv  string
-		Q    [][]string
+		Q    scp.QSet
 	}
 	_, err = toml.Decode(string(confBits), &conf)
 	if err != nil {
@@ -115,15 +116,6 @@ func main() {
 	pubKey := prv.Public().(ed25519.PublicKey)
 	pubKeyHex := hex.EncodeToString(pubKey)
 
-	var q []scp.NodeIDSet
-	for _, slice := range conf.Q {
-		var s scp.NodeIDSet
-		for _, id := range slice {
-			s = s.Add(scp.NodeID(id))
-		}
-		q = append(q, s)
-	}
-
 	// xxx this is ugly!
 	ext := map[scp.SlotID]*scp.ExtTopic{
 		scp.SlotID(chain.Height()): &scp.ExtTopic{
@@ -136,7 +128,7 @@ func main() {
 	}
 
 	nodeID := fmt.Sprintf("http://%s/%s", conf.Addr, pubKeyHex)
-	node = scp.NewNode(scp.NodeID(nodeID), q, msgChan, ext)
+	node = scp.NewNode(scp.NodeID(nodeID), conf.Q, msgChan, ext)
 
 	go func() {
 		node.Run(bgctx)

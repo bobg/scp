@@ -1,8 +1,8 @@
 [alice]
-Q = [{m = 2, s = ["bob", "carol"]}]
+Q = {t = 2, m = [{n = "bob"}, {n = "carol"}]}
 
 [bob]
-Q = [{m = 2, s = ["alice", "carol"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "carol"}]}
 
 [carol]
-Q = [{m = 2, s = ["alice", "bob"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "bob"}]}

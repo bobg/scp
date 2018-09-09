@@ -1,29 +1,29 @@
 [alice]
-Q = [{m = 2, s = ["bob", "carol", "dave"]}]
+Q = {t = 2, m = [{n = "bob"}, {n = "carol"}, {n = "dave"}]}
 
 [bob]
-Q = [{m = 2, s = ["alice", "carol", "dave"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "carol"}, {n = "dave"}]}
 
 [carol]
-Q = [{m = 2, s = ["alice", "bob", "dave"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "bob"}, {n = "dave"}]}
 
 [dave]
-Q = [{m = 2, s = ["alice", "bob", "carol"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "bob"}, {n = "carol"}]}
 
 [elsie]
-Q = [{m = 2, s = ["alice", "bob", "carol", "dave"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "bob"}, {n = "carol"}, {n = "dave"}]}
 
 [fred]
-Q = [{m = 2, s = ["alice", "bob", "carol", "dave"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "bob"}, {n = "carol"}, {n = "dave"}]}
 
 [gwen]
-Q = [{m = 2, s = ["alice", "bob", "carol", "dave"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "bob"}, {n = "carol"}, {n = "dave"}]}
 
 [hank]
-Q = [{m = 2, s = ["alice", "bob", "carol", "dave"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "bob"}, {n = "carol"}, {n = "dave"}]}
 
 [inez]
-Q = [{m = 2, s = ["elsie", "fred", "gwen", "hank"]}]
+Q = {t = 2, m = [{n = "elsie"}, {n = "fred"}, {n = "gwen"}, {n = "hank"}]}
 
 [john]
-Q = [{m = 2, s = ["elsie", "fred", "gwen", "hank"]}]
+Q = {t = 2, m = [{n = "elsie"}, {n = "fred"}, {n = "gwen"}, {n = "hank"}]}

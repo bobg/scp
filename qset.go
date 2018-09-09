@@ -2,16 +2,16 @@ package scp
 
 type (
 	QSet struct {
-		Threshold int
-		Members   []QSetMember
+		T int          `json:"threshold"`
+		M []QSetMember `json:"members"`
 	}
 
 	// QSetMember is a member of a QSet.
 	// It's either a node ID or a nested QSet.
 	// Exactly one of its fields is non-nil.
 	QSetMember struct {
-		NodeID *NodeID
-		QSet   *QSet
+		N *NodeID `json:"node_id,omitempty"`
+		Q *QSet   `json:"qset,omitempty"`
 	}
 )
 
@@ -56,27 +56,31 @@ func (q QSet) findBlockingSet(msgs map[NodeID]*Msg, pred predicate) (NodeIDSet, 
 // predicate. The slot's node itself is presumed to satisfy the
 // predicate.
 func (q QSet) findQuorum(nodeID NodeID, m map[NodeID]*Msg, pred predicate) (NodeIDSet, predicate) {
-	return findQuorumHelper(q.Threshold, q.Members, m, pred, NodeIDSet{nodeID})
+	return findQuorumHelper(q.T, q.M, m, pred, NodeIDSet{nodeID})
 }
 
 func findQuorumHelper(threshold int, members []QSetMember, msgs map[NodeID]*Msg, pred predicate, sofar NodeIDSet) (NodeIDSet, predicate) {
-	// xxx threshold == 0
-	// xxx len(members) == 0
+	if threshold == 0 {
+		return sofar, pred
+	}
+	if len(members) == 0 {
+		return nil, pred
+	}
 	m0 := members[0]
 	switch {
-	case m0.NodeID != nil:
-		if sofar.Contains(*m0.NodeID) {
+	case m0.N != nil:
+		if sofar.Contains(*m0.N) {
 			return findQuorumHelper(threshold-1, members[1:], msgs, pred, sofar)
 		}
-		if msg, ok := msgs[*m0.NodeID]; ok && pred.test(msg) {
-			sofar2, pred2 := findQuorumHelper(msg.Q.Threshold, msg.Q.Members, msgs, pred.next(), sofar.Add(*m0.NodeID))
+		if msg, ok := msgs[*m0.N]; ok && pred.test(msg) {
+			sofar2, pred2 := findQuorumHelper(msg.Q.T, msg.Q.M, msgs, pred.next(), sofar.Add(*m0.N))
 			if len(sofar2) > 0 {
 				return findQuorumHelper(threshold-1, members[1:], msgs, pred2, sofar2)
 			}
 		}
 
-	case m0.QSet != nil:
-		sofar2, pred2 := findQuorumHelper(m0.QSet.Threshold, m0.QSet.Members, msgs, pred, sofar)
+	case m0.Q != nil:
+		sofar2, pred2 := findQuorumHelper(m0.Q.T, m0.Q.M, msgs, pred, sofar)
 		if len(sofar2) > 0 {
 			return findQuorumHelper(threshold-1, members[1:], msgs, pred2, sofar2)
 		}
@@ -112,7 +116,7 @@ func (q QSet) weight(id NodeID) (float64, bool) {
 }
 
 func (q QSet) slices(f func(NodeIDSet) bool) {
-	slicesHelper(q.Threshold, q.Members, f, nil)
+	slicesHelper(q.T, q.M, f, nil)
 }
 
 // t > 0
@@ -124,13 +128,13 @@ func slicesHelper(t int, members []QSetMember, f func(NodeIDSet) bool, sofar Nod
 	if t == 1 {
 		for _, m := range members {
 			switch {
-			case m.NodeID != nil:
-				if !f(sofar.Add(*m.NodeID)) {
+			case m.N != nil:
+				if !f(sofar.Add(*m.N)) {
 					return
 				}
 
-			case m.QSet != nil:
-				slicesHelper(m.QSet.Threshold, m.QSet.Members, f, sofar)
+			case m.Q != nil:
+				slicesHelper(m.Q.T, m.Q.M, f, sofar)
 			}
 		}
 		return
@@ -138,13 +142,13 @@ func slicesHelper(t int, members []QSetMember, f func(NodeIDSet) bool, sofar Nod
 
 	m0 := members[0]
 	switch {
-	case m0.NodeID != nil:
-		slicesHelper(t-1, members[1:], f, append(sofar, *m0.NodeID))
+	case m0.N != nil:
+		slicesHelper(t-1, members[1:], f, append(sofar, *m0.N))
 
-	case m0.QSet != nil:
+	case m0.Q != nil:
 		slicesHelper(
-			m0.QSet.Threshold,
-			m0.QSet.Members,
+			m0.Q.T,
+			m0.Q.M,
 			func(n NodeIDSet) bool {
 				slicesHelper(t-1, members[1:], f, sofar.Union(n))
 				return true

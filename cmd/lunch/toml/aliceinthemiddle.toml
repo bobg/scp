@@ -1,15 +1,15 @@
 [alice]
-Q = [{m = 2, s = ["bob", "carol"]},
-     {m = 2, s = ["dave", "elsie"]}]
+Q = {t = 1, m = [{t = 2, m = [{n = "bob"}, {n = "carol"}]},
+                 {t = 2, m = [{n = "dave"}, {n = "elsie"}]}]}
 
 [bob]
-Q = [{m = 2, s = ["alice", "carol"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "carol"}]}
 
 [carol]
-Q = [{m = 2, s = ["alice", "bob"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "bob"}]}
 
 [dave]
-Q = [{m = 2, s = ["alice", "elsie"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "elsie"}]}
 
 [elsie]
-Q = [{m = 2, s = ["alice", "dave"]}]
+Q = {t = 2, m = [{n = "alice"}, {n = "dave"}]}
