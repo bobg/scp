@@ -38,7 +38,7 @@ func TestPeers(t *testing.T) {
 				q = append(q, ns)
 			}
 			ch := make(chan *Msg)
-			n := NewNode("x", q, ch, nil)
+			n := NewNode("x", slicesToQSet(q), ch, nil)
 			got := n.Peers()
 			want := toNodeIDSet(tc.want)
 			if !reflect.DeepEqual(got, NodeIDSet(want)) {
@@ -78,7 +78,7 @@ func TestWeight(t *testing.T) {
 				q = append(q, ns)
 			}
 			ch := make(chan *Msg)
-			n := NewNode("x", q, ch, nil)
+			n := NewNode("x", slicesToQSet(q), ch, nil)
 			_, is1 := n.Weight(n.ID)
 			if !is1 {
 				t.Errorf("got !is1, want is1 for n.Weight(n.ID)")
@@ -96,6 +96,19 @@ func toNodeIDSet(s string) NodeIDSet {
 	fields := strings.Fields(s)
 	for _, f := range fields {
 		result = result.Add(NodeID(f))
+	}
+	return result
+}
+
+func slicesToQSet(slices []NodeIDSet) QSet {
+	result := QSet{Threshold: 1}
+	for _, slice := range slices {
+		sub := QSet{Threshold: len(slice)}
+		for _, nodeID := range slice {
+			nodeID := nodeID
+			sub.Members = append(sub.Members, QSetMember{NodeID: &nodeID})
+		}
+		result.Members = append(result.Members, QSetMember{QSet: &sub})
 	}
 	return result
 }
