@@ -94,48 +94,35 @@ func main() {
 			node.Handle(nomMsg)
 		}
 
-		toSend := make(map[scp.NodeID]*scp.Msg)
-		for looping := true; looping; {
-			select {
-			case msg := <-ch:
-				if msg.I < slotID {
-					// discard messages about old slots
-					continue
-				}
-				msgs[msg.V] = msg
-				allExt := true
-				for _, m := range msgs {
-					if m == nil {
-						allExt = false
-						break
-					}
-					if _, ok := m.T.(*scp.ExtTopic); !ok {
-						allExt = false
-						break
-					}
-				}
-				if allExt {
-					log.Print("all externalized")
-					looping = false
+		for msg := range ch {
+			if msg.I < slotID {
+				// discard messages about old slots
+				continue
+			}
+			msgs[msg.V] = msg
+			allExt := true
+			for _, m := range msgs {
+				if m == nil {
+					allExt = false
 					break
 				}
-				toSend[msg.V] = msg
-
-			default:
-				if len(toSend) > 0 {
-					for nodeID, msg := range toSend {
-						for otherNodeID, otherNode := range nodes {
-							if otherNodeID == nodeID {
-								continue
-							}
-							if *delay > 0 {
-								otherNode.Delay(rand.Intn(*delay))
-							}
-							otherNode.Handle(msg)
-						}
-					}
-					toSend = make(map[scp.NodeID]*scp.Msg)
+				if _, ok := m.T.(*scp.ExtTopic); !ok {
+					allExt = false
+					break
 				}
+			}
+			if allExt {
+				log.Print("all externalized")
+				break
+			}
+			for otherNodeID, otherNode := range nodes {
+				if otherNodeID == msg.V {
+					continue
+				}
+				if *delay > 0 {
+					otherNode.Delay(rand.Intn(*delay))
+				}
+				otherNode.Handle(msg)
 			}
 		}
 	}

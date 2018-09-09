@@ -413,52 +413,60 @@ func (s *Slot) updateB() {
 	// "ballot.counter" to the lowest value such that this is no
 	// longer the case.  (When doing so, it also disables any
 	// pending timers associated with the old "counter".)
-	//
-	// TODO: this code uses the minimum value from the blocking set
-	// found, but should instead use the max-min from all possible
-	// blocking sets (i.e., after this, there must be no blocking set
-	// where all ballot counters are higher).
-	var doSetBX bool
-	for {
+	var (
+		doSetBX bool
+		setBN   int
+	)
+	for { // loop until no such blocking set is found
 		nodeIDs := s.findBlockingSet(fpred(func(msg *Msg) bool {
 			return msg.bN() > s.B.N
 		}))
 		if len(nodeIDs) == 0 {
 			break
 		}
+
 		doSetBX = true
 		s.cancelUpd()
-		var setBN int
+		var innerSetBN int
 		for i, nodeID := range nodeIDs {
 			msg := s.M[nodeID]
 			bn := msg.bN()
-			if i == 0 || bn < setBN {
-				setBN = bn
+			if i == 0 || bn < innerSetBN {
+				innerSetBN = bn
 			}
 		}
+		if innerSetBN > setBN {
+			setBN = innerSetBN
+		}
+	}
 
-		// To avoid exhausting `ballot.counter`, its value must always be
-		// less then 1,000 plus the number of seconds a node has been
-		// running SCP on the current slot.  Should any of the above rules
-		// require increasing the counter beyond this value, a node either
-		// increases `ballot.counter` to the maximum permissible value,
-		// or, if it is already at this maximum, waits up to one second
-		// before increasing the value.
-		maxBN := 1000 + int(time.Since(s.T)/time.Second)
-		if setBN <= maxBN {
-			s.B.N = setBN
-			continue
-		}
-		if s.B.N < maxBN {
-			s.Logf("limiting B.N to %d (from %d)", maxBN, setBN)
-			s.B.N = maxBN
-		} else {
-			setBN = s.B.N + 1
-			until := time.Until(s.T.Add(time.Duration(setBN * int(time.Second))))
-			s.Logf("limiting B.N to %d (from %d) after a %s sleep", maxBN, setBN, until)
-			time.Sleep(until)
-			s.B.N = setBN
-		}
+	if setBN == 0 {
+		return
+	}
+
+	// To avoid exhausting `ballot.counter`, its value must always be
+	// less then 1,000 plus the number of seconds a node has been
+	// running SCP on the current slot.  Should any of the above rules
+	// require increasing the counter beyond this value, a node either
+	// increases `ballot.counter` to the maximum permissible value,
+	// or, if it is already at this maximum, waits up to one second
+	// before increasing the value.
+	maxBN := 1000 + int(time.Since(s.T)/time.Second)
+	if setBN <= maxBN {
+		s.B.N = setBN
+	} else if s.B.N < maxBN {
+		s.Logf("limiting B.N to %d (from %d)", maxBN, setBN)
+		s.B.N = maxBN
+	} else {
+		setBN = s.B.N + 1
+
+		// The time when it's ok to set s.B.N to setBN (i.e., after it's been running for setBN-1000 seconds)
+		oktime := s.T.Add(time.Duration(setBN-1000) * time.Second)
+		until := time.Until(oktime)
+
+		s.Logf("limiting B.N to %d (from %d) after a %s sleep", maxBN, setBN, until)
+		time.Sleep(until)
+		s.B.N = setBN
 	}
 	if doSetBX {
 		s.setBX()
