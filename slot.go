@@ -640,7 +640,7 @@ func (s *Slot) updateP() {
 			// Exclude ballots with N > B.N, if s.B is set.
 			// If it's not set, we're still in NOMINATE phase and can set
 			// s.P to anything.
-			for len(apOut) > 0 && s.P.N > s.B.N {
+			for len(apOut) > 0 && apOut[len(apOut)-1].N > s.B.N {
 				apOut = apOut[:len(apOut)-1]
 			}
 		}
