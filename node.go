@@ -10,7 +10,6 @@ import (
 	"log"
 	"math/big"
 	"math/rand"
-	"sync"
 	"time"
 
 	"github.com/davecgh/go-xdr/xdr"
@@ -35,7 +34,7 @@ type Node struct {
 	// FQ==0 is treated as 0/1.
 	FP, FQ int
 
-	mu sync.Mutex
+	// mu sync.Mutex
 
 	// pending holds Slot objects during nomination and balloting.
 	pending map[SlotID]*Slot
@@ -77,8 +76,8 @@ func (n *Node) Run(ctx context.Context) {
 			switch cmd := cmd.(type) {
 			case *msgCmd:
 				func() {
-					n.mu.Lock()
-					defer n.mu.Unlock()
+					// n.mu.Lock()
+					// defer n.mu.Unlock()
 					if delayUntil != nil {
 						dur := time.Until(*delayUntil)
 						if dur > 0 {
@@ -98,15 +97,15 @@ func (n *Node) Run(ctx context.Context) {
 
 			case *deferredUpdateCmd:
 				func() {
-					n.mu.Lock()
-					defer n.mu.Unlock()
+					// n.mu.Lock()
+					// defer n.mu.Unlock()
 					cmd.slot.deferredUpdate()
 				}()
 
 			case *newRoundCmd:
 				func() {
-					n.mu.Lock()
-					defer n.mu.Unlock()
+					// n.mu.Lock()
+					// defer n.mu.Unlock()
 					err := cmd.slot.newRound()
 					if err != nil {
 						n.Logf("ERROR %s", err)
@@ -115,8 +114,8 @@ func (n *Node) Run(ctx context.Context) {
 
 			case *rehandleCmd:
 				func() {
-					n.mu.Lock()
-					defer n.mu.Unlock()
+					// n.mu.Lock()
+					// defer n.mu.Unlock()
 					for _, msg := range cmd.slot.M {
 						err := n.handle(msg)
 						if err != nil {
@@ -320,8 +319,8 @@ func (n *Node) Priority(i SlotID, num int, nodeID NodeID) ([32]byte, error) {
 // AllKnown gives the complete set of reachable node IDs,
 // excluding n.ID.
 func (n *Node) AllKnown() NodeIDSet {
-	n.mu.Lock()
-	defer n.mu.Unlock()
+	// n.mu.Lock()
+	// defer n.mu.Unlock()
 
 	result := n.Peers()
 	for _, s := range n.pending {
@@ -336,8 +335,8 @@ func (n *Node) AllKnown() NodeIDSet {
 // HighestExt returns the ID of the highest slot for which this node
 // has an externalized value.
 func (n *Node) HighestExt() SlotID {
-	n.mu.Lock()
-	defer n.mu.Unlock()
+	// n.mu.Lock()
+	// defer n.mu.Unlock()
 
 	var result SlotID
 	for slotID := range n.ext {
@@ -351,8 +350,8 @@ func (n *Node) HighestExt() SlotID {
 // MsgsSince returns all this node's messages with slotID > since.
 // TODO: need a better interface, this list could get hella big.
 func (n *Node) MsgsSince(since SlotID) []*Msg {
-	n.mu.Lock()
-	defer n.mu.Unlock()
+	// n.mu.Lock()
+	// defer n.mu.Unlock()
 
 	var result []*Msg
 
