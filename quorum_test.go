@@ -284,6 +284,75 @@ func TestFindQuorum(t *testing.T) {
 			},
 			want: NodeIDSet{"x", "x1", "x3", "x6", "x8"},
 		},
+		{
+			id: "x",
+			q: QSet{
+				T: 1,
+				M: []QSetMember{
+					{
+						Q: &QSet{
+							T: 2,
+							M: []QSetMember{
+								{N: nodeIDPtr("x1")},
+								{N: nodeIDPtr("y1")},
+							},
+						},
+					},
+					{
+						Q: &QSet{
+							T: 2,
+							M: []QSetMember{
+								{N: nodeIDPtr("x2")},
+								{N: nodeIDPtr("y2")},
+							},
+						},
+					},
+				},
+			},
+			m: map[NodeID]*Msg{
+				"x1": &Msg{
+					V: "x1",
+					Q: QSet{
+						T: 2,
+						M: []QSetMember{
+							{N: nodeIDPtr("x")},
+							{N: nodeIDPtr("y1")},
+						},
+					},
+				},
+				"y1": &Msg{
+					V: "y1",
+					Q: QSet{
+						T: 2,
+						M: []QSetMember{
+							{N: nodeIDPtr("x")},
+							{N: nodeIDPtr("x1")},
+						},
+					},
+				},
+				"x2": &Msg{
+					V: "x2",
+					Q: QSet{
+						T: 2,
+						M: []QSetMember{
+							{N: nodeIDPtr("x")},
+							{N: nodeIDPtr("y2")},
+						},
+					},
+				},
+				"y2": &Msg{
+					V: "y2",
+					Q: QSet{
+						T: 2,
+						M: []QSetMember{
+							{N: nodeIDPtr("x")},
+							{N: nodeIDPtr("x2")},
+						},
+					},
+				},
+			},
+			want: nil,
+		},
 	}
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%02d", i+1), func(t *testing.T) {
