@@ -63,6 +63,10 @@ func (s *Slot) accept(f func(bool) predicate) NodeIDSet {
 	}
 
 	// 3. Look for a quorum that votes-or-accepts.
+	//    The quorum necessarily includes s's node.
+	if s.sent == nil || !f(true).test(s.sent) {
+		return nil
+	}
 	return s.findQuorum(f(true))
 }
 
