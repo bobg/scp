@@ -74,7 +74,7 @@ func main() {
 	}
 
 	nodes := make(map[scp.NodeID]*scp.Node)
-	ch := make(chan *scp.Msg)
+	ch := make(chan *scp.Msg, 10000) // the 10000 should be unnecessary, but must first solve a deadlock bug
 	for nodeID, nconf := range conf {
 		node := scp.NewNode(scp.NodeID(nodeID), nconf.Q, ch, nil)
 		node.FP, node.FQ = nconf.FP, nconf.FQ
