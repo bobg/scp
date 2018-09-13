@@ -47,10 +47,22 @@ func (s *Slot) findQuorum(pred predicate) NodeIDSet {
 // is false and a "votes-or-accepts" predicate when its argument is
 // true.
 func (s *Slot) accept(f func(bool) predicate) NodeIDSet {
+	// 1. If s's node accepts the statement,
+	//    we're done
+	//    (since it is its own blocking set and,
+	//    more intuitively,
+	//    node N can accept X if N already accepts X).
+	if s.sent != nil && f(false).test(s.sent) {
+		return NodeIDSet{s.V.ID}
+	}
+
+	// 2. Look for a blocking set apart from s.V that accepts.
 	nodeIDs := s.findBlockingSet(f(false))
 	if len(nodeIDs) > 0 {
 		return nodeIDs
 	}
+
+	// 3. Look for a quorum that votes-or-accepts.
 	return s.findQuorum(f(true))
 }
 

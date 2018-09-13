@@ -17,7 +17,7 @@ type Slot struct {
 	V    *Node
 	Ph   Phase           // PhNom -> PhNomPrep -> PhPrep -> PhCommit -> PhExt
 	M    map[NodeID]*Msg // latest message from each peer
-	sent Topic           // latest message sent
+	sent *Msg            // latest message sent
 
 	T time.Time // time at which this slot was created (for computing the nomination round)
 	X ValueSet  // votes for nominate(val)
@@ -100,10 +100,10 @@ func (s *Slot) handle(msg *Msg) (resp *Msg, err error) {
 	defer func() {
 		if err == nil {
 			if resp != nil {
-				if reflect.DeepEqual(resp.T, s.sent) {
+				if s.sent != nil && reflect.DeepEqual(resp.T, s.sent.T) {
 					resp = nil
 				} else {
-					s.sent = resp.T
+					s.sent = resp
 				}
 			}
 			if resp != nil {
