@@ -612,10 +612,22 @@ func (s *Slot) updateYZ() {
 // found. There might be higher accepted-prepared ballots in other
 // quorums.
 func (s *Slot) updateP() {
+	var apIn BallotSet
+
+	if !s.B.IsZero() {
+		apIn.Add(s.B)
+	}
+	if !s.P.IsZero() {
+		apIn.Add(s.P)
+		if !s.PP.IsZero() {
+			apIn.Add(s.PP)
+		}
+	}
+
 	s.P = ZeroBallot
 	s.PP = ZeroBallot
 
-	var apIn, apOut BallotSet
+	var apOut BallotSet
 	peers := s.V.Peers()
 	for _, peerID := range peers {
 		if msg, ok := s.M[peerID]; ok {
@@ -631,7 +643,8 @@ func (s *Slot) updateP() {
 				if isQuorum {
 					setFn = msg.votesOrAcceptsPreparedSet
 				}
-				return ballots.Intersection(setFn())
+				b := setFn()
+				return ballots.Intersection(b)
 			},
 		}
 	})
