@@ -40,11 +40,6 @@ func (b Ballot) Equal(other Ballot) bool {
 	return b.N == other.N && ValueEqual(b.X, other.X)
 }
 
-// Aborts tells whether a vote to prepare one ballot aborts another.
-func (b Ballot) Aborts(other Ballot) bool {
-	return other.N < b.N && !ValueEqual(other.X, b.X)
-}
-
 // String produces a readable representation of a ballot.
 func (b Ballot) String() string {
 	if b.IsZero() {
