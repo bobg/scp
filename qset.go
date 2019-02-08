@@ -79,7 +79,10 @@ func findQuorumHelper(threshold int, members []QSetMember, msgs map[NodeID]*Msg,
 			return findQuorumHelper(threshold-1, members[1:], msgs, pred, sofar)
 		}
 		if msg, ok := msgs[*m0.N]; ok && pred.test(msg) {
-			return findQuorumHelper(threshold-1, members[1:], msgs, pred.next(), sofar.Add(*m0.N))
+			sofar2, pred2 := findQuorumHelper(msg.Q.T, msg.Q.M, msgs, pred.next(), sofar.Add(*m0.N))
+			if len(sofar2) > 0 {
+				return findQuorumHelper(threshold-1, members[1:], msgs, pred2, sofar2)
+			}
 		}
 
 	case m0.Q != nil:
