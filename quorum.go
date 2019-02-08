@@ -53,8 +53,7 @@ func (s *Slot) accept(f func(bool) predicate) NodeIDSet {
 	//    more intuitively,
 	//    node N can accept X if N already accepts X).
 	acceptsPred := f(false)
-	if s.sent != nil && acceptsPred.test(s.sent) {
-		acceptsPred.next() // every successful call to predicate.test must be followed by predicate.next
+	if s.sent != nil && acceptsPred.test(s.sent) != nil {
 		return NodeIDSet{s.V.ID}
 	}
 
@@ -67,7 +66,7 @@ func (s *Slot) accept(f func(bool) predicate) NodeIDSet {
 	// 3. Look for a quorum that votes-or-accepts.
 	//    The quorum necessarily includes s's node.
 	votesOrAcceptsPred := f(true)
-	if s.sent == nil || !votesOrAcceptsPred.test(s.sent) {
+	if s.sent == nil || votesOrAcceptsPred.test(s.sent) == nil {
 		return nil
 	}
 	return s.findQuorum(votesOrAcceptsPred)
@@ -75,25 +74,24 @@ func (s *Slot) accept(f func(bool) predicate) NodeIDSet {
 
 // Abstract predicate. Concrete types below.
 type predicate interface {
-	test(*Msg) bool
-
-	// Allows a predicate to update itself after each successful call to
-	// test, by returning a modified copy of itself for the next call to
-	// test. When findQuorum needs to backtrack, it also unwinds to
-	// earlier values of the predicate.
-	next() predicate
+	// Tests whether a node's latest message satisfies this predicate.
+	// If it does not, the return value must be nil.
+	// If it does, the return value should be the predicate,
+	// or an updated copy of the predicate for use in a subsequent call to test.
+	// The original predicate should not change, because when findQuorum needs to backtrack,
+	// it also unwinds to earlier values of the predicate.
+	test(*Msg) predicate
 }
 
 // This is a simple function predicate. It does not change from one
 // call to the next.
 type fpred func(*Msg) bool
 
-func (f fpred) test(msg *Msg) bool {
-	return f(msg)
-}
-
-func (f fpred) next() predicate {
-	return f
+func (f fpred) test(msg *Msg) predicate {
+	if f(msg) {
+		return f
+	}
+	return nil
 }
 
 // This is a predicate that can narrow a set of values as it traverses
@@ -105,15 +103,14 @@ type valueSetPred struct {
 	testfn    func(*Msg, ValueSet) ValueSet
 }
 
-func (p *valueSetPred) test(msg *Msg) bool {
+func (p *valueSetPred) test(msg *Msg) predicate {
 	if len(p.vals) == 0 {
-		return false
+		return nil
 	}
 	p.nextVals = p.testfn(msg, p.vals)
-	return len(p.nextVals) > 0
-}
-
-func (p *valueSetPred) next() predicate {
+	if len(p.nextVals) == 0 {
+		return nil
+	}
 	if p.finalVals != nil {
 		*p.finalVals = p.nextVals
 	}
@@ -133,15 +130,14 @@ type ballotSetPred struct {
 	testfn       func(*Msg, BallotSet) BallotSet
 }
 
-func (p *ballotSetPred) test(msg *Msg) bool {
+func (p *ballotSetPred) test(msg *Msg) predicate {
 	if len(p.ballots) == 0 {
-		return false
+		return nil
 	}
 	p.nextBallots = p.testfn(msg, p.ballots)
-	return len(p.nextBallots) > 0
-}
-
-func (p *ballotSetPred) next() predicate {
+	if len(p.nextBallots) == 0 {
+		return nil
+	}
 	if p.finalBallots != nil {
 		*p.finalBallots = p.nextBallots
 	}
@@ -161,20 +157,16 @@ type minMaxPred struct {
 	testfn             func(msg *Msg, min, max int) (bool, int, int)
 }
 
-func (p *minMaxPred) test(msg *Msg) bool {
+func (p *minMaxPred) test(msg *Msg) predicate {
 	p.nextMin, p.nextMax = p.min, p.max
 	if p.min > p.max {
-		return false
+		return nil
 	}
 	res, min, max := p.testfn(msg, p.min, p.max)
 	if !res {
-		return false
+		return nil
 	}
 	p.nextMin, p.nextMax = min, max
-	return true
-}
-
-func (p *minMaxPred) next() predicate {
 	if p.finalMin != nil {
 		*p.finalMin = p.nextMin
 	}

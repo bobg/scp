@@ -45,8 +45,10 @@ func findBlockingSetHelper(needed int, members []QSetMember, msgs map[NodeID]*Ms
 	m0 := members[0]
 	switch {
 	case m0.N != nil:
-		if msg, ok := msgs[*m0.N]; ok && pred.test(msg) {
-			return findBlockingSetHelper(needed-1, members[1:], msgs, pred.next(), sofar.Add(*m0.N))
+		if msg, ok := msgs[*m0.N]; ok {
+			if nextPred := pred.test(msg); nextPred != nil {
+				return findBlockingSetHelper(needed-1, members[1:], msgs, nextPred, sofar.Add(*m0.N))
+			}
 		}
 
 	case m0.Q != nil:
@@ -78,10 +80,12 @@ func findQuorumHelper(threshold int, members []QSetMember, msgs map[NodeID]*Msg,
 		if sofar.Contains(*m0.N) {
 			return findQuorumHelper(threshold-1, members[1:], msgs, pred, sofar)
 		}
-		if msg, ok := msgs[*m0.N]; ok && pred.test(msg) {
-			sofar2, pred2 := findQuorumHelper(msg.Q.T, msg.Q.M, msgs, pred.next(), sofar.Add(*m0.N))
-			if len(sofar2) > 0 {
-				return findQuorumHelper(threshold-1, members[1:], msgs, pred2, sofar2)
+		if msg, ok := msgs[*m0.N]; ok {
+			if nextPred := pred.test(msg); nextPred != nil {
+				sofar2, pred2 := findQuorumHelper(msg.Q.T, msg.Q.M, msgs, nextPred, sofar.Add(*m0.N))
+				if len(sofar2) > 0 {
+					return findQuorumHelper(threshold-1, members[1:], msgs, pred2, sofar2)
+				}
 			}
 		}
 
