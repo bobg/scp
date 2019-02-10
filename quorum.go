@@ -98,7 +98,6 @@ func (f fpred) test(msg *Msg) predicate {
 // nodes.
 type valueSetPred struct {
 	vals      ValueSet
-	nextVals  ValueSet
 	finalVals *ValueSet
 	testfn    func(*Msg, ValueSet) ValueSet
 }
@@ -107,15 +106,15 @@ func (p *valueSetPred) test(msg *Msg) predicate {
 	if len(p.vals) == 0 {
 		return nil
 	}
-	p.nextVals = p.testfn(msg, p.vals)
-	if len(p.nextVals) == 0 {
+	nextVals := p.testfn(msg, p.vals)
+	if len(nextVals) == 0 {
 		return nil
 	}
 	if p.finalVals != nil {
-		*p.finalVals = p.nextVals
+		*p.finalVals = nextVals
 	}
 	return &valueSetPred{
-		vals:      p.nextVals,
+		vals:      nextVals,
 		finalVals: p.finalVals,
 		testfn:    p.testfn,
 	}
@@ -125,7 +124,6 @@ func (p *valueSetPred) test(msg *Msg) predicate {
 // nodes.
 type ballotSetPred struct {
 	ballots      BallotSet
-	nextBallots  BallotSet
 	finalBallots *BallotSet
 	testfn       func(*Msg, BallotSet) BallotSet
 }
@@ -134,15 +132,15 @@ func (p *ballotSetPred) test(msg *Msg) predicate {
 	if len(p.ballots) == 0 {
 		return nil
 	}
-	p.nextBallots = p.testfn(msg, p.ballots)
-	if len(p.nextBallots) == 0 {
+	nextBallots := p.testfn(msg, p.ballots)
+	if len(nextBallots) == 0 {
 		return nil
 	}
 	if p.finalBallots != nil {
-		*p.finalBallots = p.nextBallots
+		*p.finalBallots = nextBallots
 	}
 	return &ballotSetPred{
-		ballots:      p.nextBallots,
+		ballots:      nextBallots,
 		finalBallots: p.finalBallots,
 		testfn:       p.testfn,
 	}
@@ -152,13 +150,11 @@ func (p *ballotSetPred) test(msg *Msg) predicate {
 // traverses nodes.
 type minMaxPred struct {
 	min, max           int  // the current min/max bounds
-	nextMin, nextMax   int  // min/max bounds for when the next predicate is generated
 	finalMin, finalMax *int // each call to next updates the min/max bounds these point to
 	testfn             func(msg *Msg, min, max int) (bool, int, int)
 }
 
 func (p *minMaxPred) test(msg *Msg) predicate {
-	p.nextMin, p.nextMax = p.min, p.max
 	if p.min > p.max {
 		return nil
 	}
@@ -166,16 +162,16 @@ func (p *minMaxPred) test(msg *Msg) predicate {
 	if !res {
 		return nil
 	}
-	p.nextMin, p.nextMax = min, max
+	nextMin, nextMax := min, max
 	if p.finalMin != nil {
-		*p.finalMin = p.nextMin
+		*p.finalMin = nextMin
 	}
 	if p.finalMax != nil {
-		*p.finalMax = p.nextMax
+		*p.finalMax = nextMax
 	}
 	return &minMaxPred{
-		min:      p.nextMin,
-		max:      p.nextMax,
+		min:      nextMin,
+		max:      nextMax,
 		finalMin: p.finalMin,
 		finalMax: p.finalMax,
 		testfn:   p.testfn,
