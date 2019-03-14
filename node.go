@@ -43,7 +43,7 @@ type Node struct {
 	// balloting.
 	ext map[SlotID]*ExtTopic
 
-	recv chan Cmd
+	cmds *cmdChan
 	send chan<- *Msg
 }
 
@@ -57,7 +57,7 @@ func NewNode(id NodeID, q QSet, ch chan<- *Msg, ext map[SlotID]*ExtTopic) *Node 
 		Q:       q,
 		pending: make(map[SlotID]*Slot),
 		ext:     ext,
-		recv:    make(chan Cmd, 1000),
+		cmds:    newCmdChan(),
 		send:    ch,
 	}
 }
@@ -67,77 +67,71 @@ func NewNode(id NodeID, q QSet, ch chan<- *Msg, ext map[SlotID]*ExtTopic) *Node 
 func (n *Node) Run(ctx context.Context) {
 	var delayUntil *time.Time
 	for {
-		select {
-		case <-ctx.Done():
-			n.Logf("context canceled, Run exiting")
-			return
-
-		case cmd := <-n.recv:
-			switch cmd := cmd.(type) {
-			case *msgCmd:
-				func() {
-					// n.mu.Lock()
-					// defer n.mu.Unlock()
-					if delayUntil != nil {
-						dur := time.Until(*delayUntil)
-						if dur > 0 {
-							time.Sleep(dur)
-						}
-						delayUntil = nil
-					}
-					err := n.handle(cmd.msg)
-					if err != nil {
-						n.Logf("ERROR %s", err)
-					}
-				}()
-
-			case *delayCmd:
-				delayUntil = new(time.Time)
-				*delayUntil = time.Now().Add(time.Duration(cmd.ms * int(time.Millisecond)))
-
-			case *deferredUpdateCmd:
-				func() {
-					// n.mu.Lock()
-					// defer n.mu.Unlock()
-					cmd.slot.deferredUpdate()
-				}()
-
-			case *newRoundCmd:
-				func() {
-					// n.mu.Lock()
-					// defer n.mu.Unlock()
-					err := cmd.slot.newRound()
-					if err != nil {
-						n.Logf("ERROR %s", err)
-					}
-				}()
-
-			case *rehandleCmd:
-				func() {
-					// n.mu.Lock()
-					// defer n.mu.Unlock()
-					for _, msg := range cmd.slot.M {
-						err := n.handle(msg)
-						if err != nil {
-							n.Logf("ERROR %s", err)
-						}
-					}
-				}()
+		cmd, ok := n.cmds.read(ctx)
+		if !ok {
+			if ctx.Err() != nil {
+				n.Logf("context canceled, Run exiting")
+			} else {
+				n.Logf("unknown command-reading error, Run exiting")
 			}
+			return
+		}
+		switch cmd := cmd.(type) {
+		case *msgCmd:
+			func() {
+				if delayUntil != nil {
+					dur := time.Until(*delayUntil)
+					if dur > 0 {
+						time.Sleep(dur)
+					}
+					delayUntil = nil
+				}
+				err := n.handle(cmd.msg)
+				if err != nil {
+					n.Logf("ERROR %s", err)
+				}
+			}()
+
+		case *delayCmd:
+			delayUntil = new(time.Time)
+			*delayUntil = time.Now().Add(time.Duration(cmd.ms * int(time.Millisecond)))
+
+		case *deferredUpdateCmd:
+			func() {
+				cmd.slot.deferredUpdate()
+			}()
+
+		case *newRoundCmd:
+			func() {
+				err := cmd.slot.newRound()
+				if err != nil {
+					n.Logf("ERROR %s", err)
+				}
+			}()
+
+		case *rehandleCmd:
+			func() {
+				for _, msg := range cmd.slot.M {
+					err := n.handle(msg)
+					if err != nil {
+						n.Logf("ERROR %s", err)
+					}
+				}
+			}()
 		}
 	}
 }
 
 func (n *Node) deferredUpdate(s *Slot) {
-	n.recv <- &deferredUpdateCmd{slot: s}
+	n.cmds.write(&deferredUpdateCmd{slot: s})
 }
 
 func (n *Node) newRound(s *Slot) {
-	n.recv <- &newRoundCmd{slot: s}
+	n.cmds.write(&newRoundCmd{slot: s})
 }
 
 func (n *Node) rehandle(s *Slot) {
-	n.recv <- &rehandleCmd{slot: s}
+	n.cmds.write(&rehandleCmd{slot: s})
 }
 
 // Handle queues an incoming protocol message. When processed it will
@@ -153,12 +147,12 @@ func (n *Node) Handle(msg *Msg) {
 			return
 		}
 	}
-	n.recv <- &msgCmd{msg: msg}
+	n.cmds.write(&msgCmd{msg: msg})
 }
 
 // Delay simulates a network delay.
 func (n *Node) Delay(ms int) {
-	n.recv <- &delayCmd{ms: ms}
+	n.cmds.write(&delayCmd{ms: ms})
 }
 
 func (n *Node) handle(msg *Msg) error {
@@ -319,9 +313,6 @@ func (n *Node) Priority(i SlotID, num int, nodeID NodeID) ([32]byte, error) {
 // AllKnown gives the complete set of reachable node IDs,
 // excluding n.ID.
 func (n *Node) AllKnown() NodeIDSet {
-	// n.mu.Lock()
-	// defer n.mu.Unlock()
-
 	result := n.Peers()
 	for _, s := range n.pending {
 		for _, msg := range s.M {
@@ -335,9 +326,6 @@ func (n *Node) AllKnown() NodeIDSet {
 // HighestExt returns the ID of the highest slot for which this node
 // has an externalized value.
 func (n *Node) HighestExt() SlotID {
-	// n.mu.Lock()
-	// defer n.mu.Unlock()
-
 	var result SlotID
 	for slotID := range n.ext {
 		if slotID > result {
@@ -350,9 +338,6 @@ func (n *Node) HighestExt() SlotID {
 // MsgsSince returns all this node's messages with slotID > since.
 // TODO: need a better interface, this list could get hella big.
 func (n *Node) MsgsSince(since SlotID) []*Msg {
-	// n.mu.Lock()
-	// defer n.mu.Unlock()
-
 	var result []*Msg
 
 	for slotID, topic := range n.ext {
