@@ -9,6 +9,82 @@ import (
 	"unicode"
 )
 
+func TestFindQuorum(t *testing.T) {
+	cases := []struct {
+		name    string
+		network string
+		msgs    string
+		want    map[string]string
+	}{
+		{
+			name:    "simple",
+			network: "x(a b) a(b x) b(a x)",
+			msgs:    "a b x",
+			want:    map[string]string{".": "a b x"},
+		},
+		{
+			name:    "cycle",
+			network: "a(b) b(x) x(a)",
+			msgs:    "a b x",
+			want:    map[string]string{".": "a b x", "a": ""},
+		},
+		{
+			name:    "two clusters",
+			network: "x(b c / d e) b(x c) c(x b) d(x e) e(x d)",
+			msgs:    "x b c d e",
+			want:    map[string]string{"b": "x d e", "d": "x b c"},
+		},
+		{
+			name:    "two cycles",
+			network: "a(b) b(x) x(a / d) d(e) e(x)",
+			msgs:    "a b c d e",
+			want:    map[string]string{"d": "a b x", "a": "x d e"},
+		},
+		{
+			network: "x(a z / b) a(z x) b(a x) z(a x)",
+			msgs:    "a b z",
+			want:    map[string]string{".": "a x z", "b": "a x z", "z": ""},
+		},
+		{
+			name:    "fig 2 with v1=x",
+			network: "x(a b) a(b c) b(c a) c(b a)",
+			msgs:    "a b c x",
+			want:    map[string]string{".": "a b c x", "c": ""},
+		},
+		{
+			name:    "3 of 4",
+			network: "x(b c / b d / c d) b(x c / x d / c d) c(x b / x d / b d) d(x b / x c / b c)",
+			msgs:    "x b c d",
+			want:    map[string]string{"b": "c d x", "c": "b d x", "d": "b c x"},
+		},
+	}
+	for i, tc := range cases {
+		t.Run(fmt.Sprintf("%02d", i+1), func(t *testing.T) {
+			network := toNetwork(tc.network)
+			ch := make(chan *Msg)
+			node := NewNode("x", network["x"], ch, nil)
+			slot := newSlot(1, node)
+			for _, vstr := range strings.Fields(tc.msgs) {
+				v := NodeID(vstr)
+				slot.M[v] = &Msg{
+					V: v,
+					I: 1,
+					Q: network[v],
+				}
+			}
+			for exclude, want := range tc.want {
+				got := slot.findQuorum(fpred(func(msg *Msg) bool {
+					return !strings.Contains(string(msg.V), exclude)
+				}))
+				want := toNodeIDSet(want)
+				if !reflect.DeepEqual(got, want) {
+					t.Errorf("got %v, want %v", got, want)
+				}
+			}
+		})
+	}
+}
+
 func TestFindBlockingSet(t *testing.T) {
 	cases := []struct {
 		network string
